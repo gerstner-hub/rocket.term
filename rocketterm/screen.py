@@ -1,0 +1,1018 @@
+# vim: ts=4 et sw=4 sts=4 :
+
+from enum import Enum
+import os
+import logging
+import textwrap
+
+import urwid
+
+import rocketterm.controller
+import rocketterm.types
+import rocketterm.parser
+from rocketterm.widgets import CommandInput, SizedListBox
+
+ScrollDirection = Enum('ScrollDirection', "OLDER NEWER NEWEST OLDEST")
+RoomState = Enum('RoomState', "NORMAL ACTIVITY ATTENTION")
+Direction = Enum('Direction', "PREV NEXT")
+
+
+class Screen:
+    """The Screen class takes are of all user interface display logic.
+
+    Screen interacts tightly with the Controller to perform its tasks. It uses
+    urwid to manage the terminal screen.
+    """
+
+    # an urwid palette that allows to reuse common colors for similar UI
+    # items.
+    palette = (
+        ('text', 'white', 'black', '', '#ffa', '#60d'),
+        ('selected_text', 'white,standout', 'black', '', '#ffa', '#60d'),
+        ('activity_text', 'light magenta', 'black', '', '#ffa', '#60d'),
+        ('attention_text', 'light red', 'black', '', '#ffa', '#60d'),
+        ('bg1', 'black', 'black', '', 'g99', '#d06'),
+        ('bg2', 'light green', 'black', '', 'g99', '#d06'),
+        ('border', 'light magenta', 'white', '', 'g38', '#808'),
+        ('topic_bar', 'brown', 'dark green', '', 'g38', '#808'),
+        ('date_bar', 'white', 'dark gray', '', 'g38', '#808'),
+        ('input', 'white', 'black')
+    )
+
+    def __init__(self, config, comm):
+        """
+        :param dict config: The preprocessed configuration data.
+        :param comm: The comm instance to use to talk to the RC server.
+        """
+        self.m_logger = logging.getLogger("screen")
+        self.m_comm = comm
+        self.m_config = config
+        self.m_controller = rocketterm.controller.Controller(self, comm)
+        self.m_cmd_parser = rocketterm.parser.Parser(self.m_comm, self.m_controller, self)
+        # this is the chat / command input area
+        self.m_cmd_input = CommandInput(self._commandEntered, self._completeCommand)
+        # this will display the current room's messages
+        self.m_chat_box = SizedListBox(urwid.SimpleListWalker([]), size_callback=self._chatBoxResized)
+        # this will hold the list of open rooms
+        self.m_room_box = SizedListBox(urwid.SimpleListWalker([]), size_callback=self._roomBoxResized)
+        # this will display status messages mostly for responses to commands
+        self.m_status_box = SizedListBox(urwid.SimpleListWalker([]))
+        # username -> color name. A consecutively chosen color for each
+        # username encountered.
+        self.m_user_colors = {}
+        # room ID -> RoomState. an abstract UI room state we keep track of for
+        # different coloring of rooms in the room box.
+        self.m_room_states = {}
+        # the currently selected room object
+        self.m_current_room = None
+
+        # a frame that we use just for its header, which becomes a bar
+        # displaying the room topic
+        self.m_chat_frame = urwid.Frame(
+            urwid.AttrMap(self.m_chat_box, 'bg1')
+        )
+
+        # columns for holding the room box and the chat frame 10/90 relation
+        # regarding the width
+        columns = urwid.Columns(
+            [
+                ('weight', 10, urwid.AttrMap(self.m_room_box, 'bg1')),
+                ('weight', 90, self.m_chat_frame)
+            ],
+            min_width=20,
+            dividechars=1
+        )
+
+        # this will be the main outer frame, containing a heading bar as
+        # header (will be generated dynamically in _updateMainHeading()),
+        # the columns with room box and chat box as main content and a pile
+        # with status box and input box as footer.
+        self.m_frame = urwid.Frame(
+            urwid.AttrMap(columns, 'border'),
+            footer=urwid.Pile([]),
+            header=None,
+            focus_part='footer'
+        )
+
+        footer_pile = self.m_frame.contents["footer"][0]
+        footer_pile.contents.append((
+            urwid.AttrMap(urwid.Text("Command Input", align='center'), 'border'),
+            footer_pile.options()
+        ))
+        footer_pile.contents.append((
+            urwid.AttrMap(self.m_status_box, 'bg2'),
+            footer_pile.options(height_type='given', height_amount=1)
+        ))
+        footer_pile.contents.append((
+            urwid.AttrMap(self.m_cmd_input, 'input'),
+            footer_pile.options()
+        ))
+        footer_pile.focus_position = len(footer_pile.contents) - 1
+
+        self.m_loop = urwid.MainLoop(
+            self.m_frame,
+            self.palette,
+            unhandled_input=self._handleInput,
+            # disable mouse handling to support usual copy/paste interaction
+            handle_mouse=False
+        )
+
+    def _externalEvent(self, data):
+        """Called from the urwid main loop when an event was caused by writing
+        to the event pipe.
+
+        Currently only the Controller writes to the pipe to wake the urwid
+        main thread up, letting us process asychronous events.
+
+        :param bytes data: The data that was written asynchronously to
+                           self.m_urwid_pipe.
+        """
+
+        # now process asynchronous controller events in the urwid main thread,
+        # thereby eleminating the need for complicated locking.
+        self.m_controller.processEvents()
+
+        # this indicates to urwid to continue handling the pipe events
+        return True
+
+    def _getUserColor(self, user):
+        """Returns an urwid color name to be used for the given username
+        throughout the runtime of the application.
+
+        Each newly encountered user will receive another color, thereby
+        allowing to differentiate different users in a best effort fashion.
+        """
+
+        try:
+            # check whether we already assigned a color
+            return self.m_user_colors[user]
+        except KeyError:
+            pass
+
+        user_colors = (
+            # 'black',
+            'dark red',
+            'dark green',
+            'brown',
+            'dark blue',
+            'dark magenta',
+            'dark cyan',
+            'light gray',
+            'dark gray',
+            'light red',
+            'light green',
+            'yellow',
+            'light blue',
+            'light magenta',
+            'light cyan',
+            'white'
+        )
+        next_color = user_colors[len(self.m_user_colors) % len(user_colors)]
+        self.m_user_colors[user] = next_color
+
+        return next_color
+
+    def _updateMainHeading(self):
+        our_status = self.m_controller.getUserStatus(
+                self.m_controller.getLoggedInUserInfo()
+        )
+
+        parts = []
+
+        parts.append((
+            'border',
+            "Rocket.term {}@{} ({}, {}) ".format(
+                self.m_comm.getUsername(), self.m_comm.getServer(),
+                self.m_comm.getFullName(), self.m_comm.getEmail(),
+            )
+        ))
+
+        parts.append((
+            urwid.AttrSpec(self._getUserStatusColor(our_status[0]), 'white'),
+            "[{}]\n".format(our_status[0].value)
+        ))
+
+        parts.append((
+            'border',
+            "Status Message: {}".format(
+                our_status[1] if our_status[1] else "<no status message>"
+            )
+        ))
+
+        text = urwid.Text(parts, align='center')
+        header = urwid.AttrMap(text, 'border')
+        self.m_frame.set_header(header)
+
+    def _commandEntered(self, command):
+        """Called by the CommandInput widget when a command line has been
+        entered."""
+        try:
+            response = self.m_cmd_parser.commandEntered(command)
+            if not response:
+                return
+            self._setStatusMessage(response)
+        except rocketterm.parser.ParseError as e:
+            self._setStatusMessage(e.getMessage())
+
+    def _completeCommand(self, prefix):
+        """Called by the CommandInput widget when a command line should be
+        completed."""
+        try:
+            candidates, new_line = self.m_cmd_parser.completeCommand(prefix)
+        except Exception as e:
+            self._setStatusMessage("completion failed with: {}".format(str(e)))
+            return prefix
+
+        if len(candidates) > 1:
+            self._setStatusMessage(' '.join(candidates))
+        else:
+            self._setStatusMessage('')
+
+        if new_line != prefix:
+            return new_line
+
+    def _handleInput(self, k):
+        """Handles any input that is not handled by urwid itself.
+
+        In our case this means any input that is not consumed by our only
+        focused widget, the CommandInput widget. We use this to implement
+        special control keys for scrolling the room box, the chat box and
+        things like that.
+        """
+        self.m_logger.debug("User input received: {}".format(k))
+        self._clearStatusMessages()
+
+        if k == 'meta q':
+            raise urwid.ExitMainLoop()
+        elif k == 'meta up':
+            self.m_controller.selectPrevRoom()
+        elif k == 'meta down':
+            self.m_controller.selectNextRoom()
+        elif k == 'page up':
+            self._scrollMessages(ScrollDirection.OLDER)
+        elif k == 'page down':
+            self._scrollMessages(ScrollDirection.NEWER)
+        elif k == "meta page up":
+            self._scrollMessages(ScrollDirection.OLDER, True)
+        elif k == "meta page down":
+            self._scrollMessages(ScrollDirection.NEWER, True)
+        elif k == 'meta end':
+            self._scrollMessages(ScrollDirection.NEWEST)
+        elif k == 'meta home':
+            self._scrollMessages(ScrollDirection.OLDEST)
+        elif k == 'shift up':
+            self._selectActiveRoom(Direction.PREV)
+        elif k == 'shift down':
+            self._selectActiveRoom(Direction.NEXT)
+        else:
+            self.m_logger.debug("Input unhandled")
+
+    def _refreshRoomState(self, room):
+        # XXX consider moving this state handling into the controller
+
+        if room == self.m_current_room:
+            # reset any special state if this room is currently
+            # selected
+            self.m_room_states[room.getID()] = RoomState.NORMAL
+        else:
+            # populate an initial normal state
+            self.m_room_states.setdefault(room.getID(), RoomState.NORMAL)
+
+    def _getRoomColor(self, room):
+        room_state_colors = {
+            RoomState.NORMAL: "text",
+            RoomState.ATTENTION: "attention_text",
+            RoomState.ACTIVITY: "activity_text"
+        }
+
+        if room == self.m_current_room:
+            return 'selected_text'
+
+        state = self.m_room_states.get(room.getID())
+
+        return room_state_colors[state]
+
+    def _getUserStatusColor(self, status):
+        UserPresence = rocketterm.types.UserPresence
+
+        status_colors = {
+            UserPresence.Online: 'dark green',
+            UserPresence.Offline: 'white',
+            UserPresence.Busy: 'light red',
+            UserPresence.Away: 'yellow'
+        }
+
+        return status_colors[status]
+
+    def _getRoomPrefixColor(self, room):
+        if not room.isDirectChat():
+            return 'selected_text' if room == self.m_current_room else 'text'
+
+        logged_in_user = self.m_controller.getLoggedInUserInfo()
+        peer_uid = room.getPeerUserID(logged_in_user)
+        peer_user = self.m_controller.getBasicUserInfoByID(peer_uid)
+        status, _ = self.m_controller.getUserStatus(peer_user)
+        color = self._getUserStatusColor(status)
+
+        return urwid.AttrSpec(color, 'black')
+
+    def _roomBoxResized(self, widget):
+        self._updateRoomBox()
+
+    def _updateRoomBox(self):
+        """Rebuilds the room box from current status information."""
+
+        self.m_room_box.body.clear()
+        max_width = self.m_room_box.getNumCols()
+
+        for room in self.m_controller.getJoinedRooms():
+            self._refreshRoomState(room)
+            name_attr = self._getRoomColor(room)
+            prefix_attr = self._getRoomPrefixColor(room)
+            # truncate room names to avoid line breaks in list
+            # items
+            truncated_name = room.getName()[:max_width - 2]
+            parts = []
+            prefix = room.typePrefix()
+            parts.append((prefix_attr, prefix))
+            name = (name_attr, truncated_name)
+            parts.append(name)
+            self.m_room_box.body.append(urwid.Text(parts))
+
+    def _chatBoxResized(self, widget):
+        self._updateChatBox()
+
+    def _updateChatBox(self):
+        """Rebuilds the chat box from current status information."""
+
+        self.m_chat_box.body.clear()
+        self.m_oldest_chat_msg = None
+        self.m_newest_chat_msg = None
+        self.m_num_chat_msgs = 0
+        # maps msg IDs to consecutive msg nr#
+        self.m_msg_nr_map = {}
+        # maps consecutive msg nr# to msg IDs
+        self.m_msg_id_map = {}
+        # a mapping of thread parent msg IDs to a list of consecutive
+        # numbers of chat messages waiting for the parent message to
+        # be resolved
+        self.m_waiting_for_thread_parent = {}
+        messages = self.m_controller.getCachedRoomMessages()
+        msg_count = self.m_controller.getRoomMsgCount()
+
+        self.m_logger.debug(
+            "Updating chat box, currently cached: {}, complete count: {}".format(
+                len(messages),
+                msg_count
+            )
+        )
+
+        self.m_chat_frame.contents["header"] = self._getRoomHeading()
+
+        if not msg_count:
+            return
+
+        for nr, msg in enumerate(messages):
+            self._addChatMessage(msg_count - nr, msg_count, msg)
+
+        self._resolveThreadMessages()
+        self._scrollMessages(ScrollDirection.NEWEST)
+
+        self.m_logger.debug(
+                "Number of messages waiting for thread parent: {}".format(
+                    len(self.m_waiting_for_thread_parent)
+                )
+        )
+
+    def _resolveThreadMessages(self):
+        # For the hacky approach that resolves thread messages lazily
+        # we need to check whether any unresolved messages remain when
+        # we load more messages on demand.
+        # If this is the case, load more chat history until no
+        # unresolved messages remain.
+
+        extra_msgs = 0
+
+        while self.m_waiting_for_thread_parent:
+            new_msgs = self._loadMoreChatHistory()
+
+            if new_msgs == 0:
+                self.m_logger.warning("Failed to resolve some thread messages")
+                break
+
+            extra_msgs += new_msgs
+
+        return extra_msgs
+
+    def _getRoomHeading(self):
+
+        room = self.m_current_room
+
+        if not room:
+            text = "no room available"
+        elif room.isDirectChat():
+            # display the friendly peer user name and user status
+            our_info = self.m_controller.getLoggedInUserInfo()
+            user_id = room.getPeerUserID(our_info)
+            info = self.m_controller.getBasicUserInfoByID(user_id)
+            if info:
+                status = self.m_controller.getUserStatus(info)
+                text = "Direct Chat with {} [{}: {}]".format(
+                    info.getFriendlyName(),
+                    status[0].value,
+                    status[1] if status[1] else "<no status message>"
+                )
+            else:
+                self.m_logger.warning("Failed to determine user for direct chat {}".format(room.getName()))
+                text = "unknown user"
+        elif room.supportsTopic():
+            text = self.m_current_room.getTopic()
+            if room.supportsMembers():
+                user_count = self.m_controller.getRoomUserCount(room)
+                text = "{} ({} users)".format(text, user_count)
+        else:
+            # remove the heading
+            return (None, None)
+
+        return (urwid.AttrMap(urwid.Text(text, align='center'), 'topic_bar'), None)
+
+    def _loadMoreChatHistory(self):
+        """Attempts to fetch more chat history for the currently selected chat
+        room.
+
+        For each newly loaded chat message _addChatMessage() is invoked.
+
+        :return int: Number of message that could be additionally loaded.
+        """
+        more_msgs = self.m_controller.loadMoreRoomMessages()
+
+        if not more_msgs:
+            return 0
+
+        msg_count = self.m_controller.getRoomMsgCount()
+        start_nr = msg_count - self.m_num_chat_msgs
+
+        for nr, msg in enumerate(more_msgs):
+            self._addChatMessage(start_nr - nr, msg_count, msg)
+
+        return len(more_msgs)
+
+    def _getThreadLabel(self, consecutive_nr, full_msg_count, msg):
+        tid_width = len(str(full_msg_count + 1))
+        parent = msg.getThreadParent()
+        if parent:
+            parent_nr = self.m_msg_nr_map.get(parent, [-1])[0]
+            if parent_nr == -1:
+                waiters = self.m_waiting_for_thread_parent.setdefault(parent, [])
+                waiters.append(consecutive_nr)
+                # use a marker that we can later
+                # replace when we know the thread nr.
+                parent_nr = ' ' * tid_width
+            label = " #{}]".format(str(parent_nr).rjust(tid_width))
+        else:
+            label = (tid_width + 3) * ' '
+
+        return label
+
+    def _getMessageText(self, msg, consecutive_nr, full_msg_count):
+        """Transforms the message's text into a sensible message, if
+        it is a special message type.
+
+        This function handles various special situations and returns text that
+        tries to be helpful to the user.
+        """
+
+        _type = msg.getMessageType()
+        MessageType = rocketterm.types.MessageType
+        raw_message = msg.getMessage()
+        room = self.m_controller.getSelectedRoom()
+
+        if _type == MessageType.RegularMessage:
+            text = raw_message
+
+            # this is no special message type, regular messages
+            # can have empty text but a 'file' attachment.
+            if msg.wasEdited():
+                editor = msg.getEditUser()
+                edited_by_self = editor == msg.getUserInfo()
+                prev_nrs = self.m_msg_nr_map.get(msg.getID(), [])
+
+                if len(prev_nrs) <= 1:
+                    # there is no old entry, because the
+                    # editing happened without our
+                    # presence OR because a very old
+                    # message was edited that wasn't
+                    # loaded into the cache yet. Live with
+                    # that for now.
+                    edited_msg = "this message"
+                else:
+                    edited_msg = "#{}".format(prev_nrs[-2])
+
+                edit_prefix = "[{}edited {}]".format(
+                    "" if edited_by_self else msg.getEditUser().getUsername() + " ",
+                    edited_msg
+                )
+
+                text = "{}: {}".format(edit_prefix, text)
+
+            if msg.isIncrementalUpdate():
+                nrs = self.m_msg_nr_map.get(msg.getID())
+                if nrs:
+                    label = "[#{}]".format(nrs[0])
+                else:
+                    # TODO: same hack as with thread IDs
+                    tid_width = len(str(full_msg_count + 1))
+                    label = "[#{})".format(' ' * tid_width)
+                    waiters = self.m_waiting_for_thread_parent.setdefault(msg.getID(), [])
+                    waiters.append(consecutive_nr)
+                text = "{}: {}".format(label, msg.getMessage())
+
+            else:
+                for reaction, info in msg.getReactions().items():
+                    prefixed_users = [rocketterm.types.BasicUserInfo.typePrefix() + user for user in info['usernames']]
+                    text += "\n[reacted with {}]: {}".format(
+                        reaction, ', '.join(prefixed_users)
+                    )
+
+            if msg.hasFile():
+                fi = msg.getFile()
+                attach_prefix = "[file attachment: {} ({})]".format(
+                    fi.getName(),
+                    fi.getMIMEType()
+                )
+
+                if text:
+                    attach_prefix += ": "
+
+                text = attach_prefix + (text if text else "")
+
+            return text
+        elif _type in (MessageType.UserLeft, MessageType.UserJoined):
+            uinfo = msg.getUserInfo()
+            who = "{} ({})".format(uinfo.getFriendlyName(), uinfo.getUsername())
+            if _type == MessageType.UserLeft:
+                event = "has left the {}".format(room.typeLabel())
+            else:
+                event = "has joined the {}".format(room.typeLabel())
+            return "[{} {}]".format(who, event)
+        elif _type in (MessageType.UserAddedBy, MessageType.UserRemovedBy):
+            uinfo = msg.getUserInfo()
+            actor = uinfo.getFriendlyName()
+            victim = raw_message
+            place = self.m_current_room.typeLabel()
+            if _type == MessageType.UserAddedBy:
+                event = "{} has added user '{}' to this {}".format(actor, victim, place)
+            else:
+                event = "{} has removed user '{}' from this {}".format(actor, victim, place)
+
+            return "[{}]".format(event)
+        elif _type in (
+                MessageType.RoomChangedTopic,
+                MessageType.RoomChangedDescription,
+                MessageType.RoomChangedAnnouncement
+        ):
+            if _type == MessageType.RoomChangedTopic:
+                prefix = "Topic"
+            elif _type == MessageType.RoomChangedDescription:
+                prefix = "Description"
+            else:
+                prefix = "Announcement"
+
+            return "[{} of the {} changed]: {}".format(
+                prefix, room.typeLabel(), raw_message
+            )
+        elif _type in (MessageType.MessageRemoved,):
+            uinfo = msg.getUserInfo()
+            actor = uinfo.getFriendlyName()
+            event = "{} has removed this message".format(actor)
+
+            return "[{}]".format(event)
+        else:
+            return "unsupported special message type {}: {}".format(str(_type), raw_message)
+
+    def _recordMsgNr(self, nr, msg):
+        # we need to keep a list here, because with message editing
+        # the same message ID can get multiple consecutive nrs#
+        nr_list = self.m_msg_nr_map.setdefault(msg.getID(), [])
+        if not msg.isIncrementalUpdate():
+            nr_list.append(nr)
+        self.m_msg_id_map[nr] = msg.getID()
+
+    def _checkUpdateThreadChilds(self, thread_nr, thread_msg):
+        if thread_msg.isIncrementalUpdate():
+            return
+        waiters = self.m_waiting_for_thread_parent.pop(thread_msg.getID(), [])
+
+        for waiter_consecutive_nr in waiters:
+            self._updateThreadChildMessage(thread_nr, waiter_consecutive_nr)
+
+    def _updateThreadChildMessage(self, thread_nr, child_nr):
+        full_msg_count = self.m_controller.getRoomMsgCount()
+        oldest_msg_nr = full_msg_count - self.m_num_chat_msgs + 1
+        rough_child_index = child_nr - oldest_msg_nr
+
+        for index in range(rough_child_index, len(self.m_chat_box.body)):
+            candidate = self.m_chat_box.body[index]
+            text = candidate.text
+
+            if len(text) < 2 or not text.startswith("#"):
+                continue
+
+            try:
+                msg_nr = int(text[1:].split()[0])
+                if msg_nr != child_nr:
+                    continue
+            except ValueError:
+                continue
+
+            # okay we now know that this is the message we're
+            # looking for.
+            replace_str = '{} '.format(str(thread_nr))
+            needle = '{}]'.format(' ' * (len(replace_str) - 1))
+
+            new_text = text.replace(needle, replace_str, 1)
+
+            # this would be for incremental updates (mentionings)
+            replace_str = '{}]'.format(str(thread_nr))
+            needle = '{})'.format(' ' * (len(replace_str) - 1))
+
+            new_text = new_text.replace(needle, replace_str, 1)
+
+            # this messes with the internals of urwid.Text, but
+            # there's no good other way, we'd need to reconstruct
+            # all the attributes for coloring etc.
+            # we make sure that the length of the text message is
+            # not changing, otherwise the markup would not be
+            # correct any more
+            candidate._text = new_text
+
+            break
+        else:
+            self.m_logger.warn("Couldn't find thread child message #{}".format(child_nr))
+
+    def _addChatMessage(self, nr, full_msg_count, msg, at_end=False):
+        """Adds a chat message to the current chat box.
+
+        :param int nr: The consecutive message nr to use, if known, otherwise
+                       pass -1 and it is assumed that this is a new message
+                       with at_end == True.
+        :params full_msg_count: The total number of messages existing in the
+                                room (not necessarily cached).
+        :params RoomMessage msg: The message object to process.
+        :params bool at_end: Whether the message is to be appended at the end,
+                             or prepended at the beginning of the box.
+        """
+        username = msg.getUserInfo().getUsername()
+        user_color = self._getUserColor(username)
+        msg_nr_width = len(str(full_msg_count + 1))
+        if nr == -1:
+            nr = full_msg_count
+
+        # remember which consecutive number this message has in our chat
+        # box so that we can reference it later on if threaded
+        # messages occur
+        # this is quite a hack, because we usually encounter the
+        # thread child messages first so we can't know the consecutive
+        # number the thread parent will have in the future. Mark these
+        # lost thread child messages so we can update the message text
+        # in a second pass as we encounter the parent messages
+        # TODO: it would be better to to a first pass over all
+        # messages to resolve IDs and only then start building the
+        # actual message entries here.
+        self._recordMsgNr(nr, msg)
+        self._checkUpdateThreadChilds(nr, msg)
+
+        msg_nr = '#{} '.format(str(nr).rjust(msg_nr_width))
+        timestamp = msg.getCreationTimestamp().strftime("%X")
+        userprefix = " {}: ".format(username.rjust(15))
+        thread_id = self._getThreadLabel(nr, full_msg_count, msg)
+        prefix_len = len(msg_nr) + len(timestamp) + len(userprefix) + len(thread_id)
+        messagewidth = max(self.m_chat_box.getNumCols(), 80) - prefix_len - 1
+        indentation_prefix = (' ' * prefix_len)
+
+        # handle special message types by creating sensible text to
+        # display, does nothing for normal messages
+        msg_text = self._getMessageText(msg, nr, full_msg_count)
+
+        # the textwrap module is a bit difficult to tune ... we want
+        # to maintain newlines from the original string, but enforce a
+        # maximum line length while prefixing an indentation string to
+        # each line starting from the second one.
+        #
+        # maintaining the original newlines workds via
+        # `replace_whitestpace = False`, however then we don't get the
+        # lines split up in the result, when there are newlines
+        # contained in the original text. Therefore replace remaining
+        # newlines by the prefix afterwards.
+
+        lines = textwrap.wrap(
+            msg_text,
+            width=messagewidth,
+            replace_whitespace=False
+        )
+
+        if len(lines) > 1:
+            lines = lines[0:1] + [indentation_prefix + line for line in lines[1:]]
+
+        lines = [line.replace('\n', '\n' + indentation_prefix) for line in lines]
+
+        message = '\n'.join(lines)
+
+        text = urwid.Text([
+            ('text', msg_nr),
+            ('text', timestamp),
+            ('text', thread_id),
+            (urwid.AttrSpec(user_color, 'black'), userprefix),
+            ('text', message)
+        ])
+
+        self.m_num_chat_msgs += 1
+
+        self._addMsgTextToChatBox(nr, msg, text, at_end)
+
+    def _addMsgTextToChatBox(self, msg_nr, msg, text, at_end):
+        """This finally adds fully formatted text to the chat box,
+        also handling date bar display if a day change occured."""
+
+        to_add = [text]
+
+        if not self.m_oldest_chat_msg and not self.m_newest_chat_msg:
+            self.m_oldest_chat_msg = msg
+            self.m_newest_chat_msg = msg
+            compare_ts = msg.getCreationTimestamp()
+        elif at_end:  # newer message
+            compare_ts = self.m_newest_chat_msg.getCreationTimestamp()
+            self.m_newest_chat_msg = msg
+        else:  # older message
+            compare_ts = self.m_oldest_chat_msg.getCreationTimestamp()
+            self.m_oldest_chat_msg = msg
+
+        msg_ts = msg.getCreationTimestamp()
+
+        if compare_ts.date() != msg_ts.date():
+            src_date = msg_ts.date() if at_end else compare_ts.date()
+            # the date of this message changed compared to the
+            # previous / next message, thus add a date information
+            # message.
+            date_text = self._getDateText(src_date)
+
+            to_add = [date_text] + to_add
+
+        if msg_nr == 1:
+            # make sure if the oldest message is loaded that a
+            # date message is prepended in any case, so we know
+            # when the conversation in the room started
+            date_text = self._getDateText(msg_ts.date())
+
+            if at_end:
+                to_add = [date_text] + to_add
+            else:
+                to_add = to_add + [date_text]
+
+        for item in to_add:
+            if at_end:
+                self.m_chat_box.body.append(item)
+            else:
+                self.m_chat_box.body[0:0] = [item]
+
+    def _getDateText(self, date):
+        centered_date = date.strftime("%x").center(self.m_chat_box.getNumCols())
+        return urwid.Text([('date_bar', centered_date)])
+
+    def _getRows(self):
+        """Returns the number of rows the terminal currently has."""
+        # TODO: this would also need to react on terminal size changes ...
+        return self.m_loop.screen.get_cols_rows()[1]
+
+    def _selectActiveRoom(self, direction):
+        """Tries to select a new room with activie in the room box in the
+        given direction.
+
+        :param Direction direction: The search direction.
+        """
+
+        prev_active_room = None
+        select_next_active_room = False
+
+        for room in self.m_controller.getJoinedRooms():
+            if room == self.m_current_room:
+                if direction == Direction.PREV:
+                    if prev_active_room:
+                        self.m_controller.selectRoom(prev_active_room)
+                        return
+                    else:
+                        # no active room before the
+                        # selected one
+                        break
+                else:
+                    select_next_active_room = True
+            elif self.m_room_states[room.getID()] == RoomState.NORMAL:
+                continue
+            elif select_next_active_room:
+                self.m_controller.selectRoom(room)
+                return
+            else:
+                prev_active_room = room
+
+        self._setStatusMessage("no room with activity in this direction")
+
+    def _scrollMessages(self, direction, small_increments=False):
+        """Scroll chat box messages.
+
+        :param ScrollDirection direction: The scroll type to apply.
+        :param bool small_increments: Whether a large scroll step (like
+                                      page-up/down) or small scroll increments
+                                      should be performed.
+        """
+        if len(self.m_chat_box.body) == 0:
+            return
+        curpos = self.m_chat_box.focus_position
+
+        self.m_logger.debug(
+            "scroll request direction = {} curpos = {}".format(
+                direction, curpos
+            )
+        )
+
+        if direction == ScrollDirection.NEWER:
+            self.m_chat_box.scrollDown(small_increments)
+            return
+
+        elif direction == ScrollDirection.OLDER:
+            if curpos == 0:
+                new_msgs = self._loadMoreChatHistory()
+                new_msgs += self._resolveThreadMessages()
+                # since we prepended new messages, adjust our
+                # current focus to make the widget's scrolling
+                # logic work the way we want
+                # NOTE: this is only an estimate, since date
+                # bars might be around. We'd need to take that
+                # also into account to make it precise.
+                self.m_chat_box.set_focus(new_msgs)
+            self.m_chat_box.scrollUp(small_increments)
+            return
+        elif direction == ScrollDirection.NEWEST:
+            curpos = len(self.m_chat_box.body) - 1
+        elif direction == ScrollDirection.OLDEST:
+            curpos = 0
+
+            # load complete chat history
+            while self._loadMoreChatHistory() != 0:
+                pass
+
+        self.m_logger.debug("Scrolling to {}".format(curpos))
+        self.m_chat_box.set_focus(curpos)
+
+    def _setStatusMessage(self, msg):
+        """Sets a new status message in the status box."""
+        self._clearStatusMessages()
+        text = urwid.Text(('text', msg))
+        self.m_status_box.body.append(text)
+
+    def _clearStatusMessages(self):
+        self.m_status_box.body.clear()
+
+    def getMsgIDForNr(self, msg_nr):
+        """Returns the msg ID for a consecutive msg nr#."""
+        return self.m_msg_id_map[msg_nr]
+
+    def getNrsForMsgID(self, msg_id):
+        """Returns a list of consecutive msg nrs# for a msg ID."""
+        return self.m_msg_nr_map[msg_id]
+
+    def _updateCmdInputPrompt(self):
+        """Chooses an appropriate command input prompt for the current
+        application status."""
+        msg_id = self.m_controller.getSelectedThreadID()
+        if msg_id:
+            nrs = self.m_msg_nr_map[msg_id]
+            self.m_cmd_input.addPrompt("[#{}]".format(nrs[0]))
+        else:
+            self.m_cmd_input.resetPrompt()
+
+    def newRoomSelected(self):
+        """Called by the Controller when a new room was selected."""
+        self.m_current_room = self.m_controller.getSelectedRoom()
+        # possible new thread selection
+        self._updateRoomBox()
+        self._updateChatBox()
+        self._updateCmdInputPrompt()
+
+    def asyncEventOccured(self):
+        """Called by the Controller when an asynchronous event
+        occured. We will wake up the urwid main loop to process the event
+        in a synchronous fashion."""
+        os.write(self.m_urwid_pipe, b"new async event")
+
+    def ownUserStatusChanged(self, status_event):
+        """Called by the Controller when our own user status changed."""
+        # update the status displayed in the main heading
+        self._updateMainHeading()
+
+    def handleNewRoomMessage(self, msg):
+        """Called by the Controller when in one of our visible rooms a new
+        message appeared."""
+
+        room_id = msg.getRoomID()
+
+        if room_id == self.m_current_room.getID():
+            msg_count = self.m_controller.getRoomMsgCount()
+            self._addChatMessage(-1, msg_count, msg, True)
+        else:
+            if self.m_controller.doesMessageMentionUs(msg):
+                new_state = RoomState.ATTENTION
+            else:
+                new_state = RoomState.ACTIVITY
+
+            self.m_room_states[room_id] = new_state
+            self._updateRoomBox()
+
+    def roomChanged(self, room):
+        """Called by the Controller when the state of one of our subscribed
+        rooms changed."""
+
+        self.m_logger.debug("room changed: {}".format(room.getName()))
+
+        if room == self.m_controller.getSelectedRoom():
+            self._updateChatBox()
+            self._updateRoomBox()
+
+    def roomAdded(self, room):
+        """Called by the Controller when a new room was subscribed to.
+
+        This can result from a user interaction or from an external event e.g.
+        when another user writes in a direct chat to us that wasn't
+        visible/existing before.
+        """
+
+        self.m_logger.debug("room added: {}".format(room.getName()))
+        # handle the same as an opened room for now
+        self.roomOpened(room)
+
+    def roomRemoved(self, room):
+        """Called by the Controller when a subscribed to room was removed."""
+
+        self.m_logger.debug("room removed: {}".format(room.getName()))
+        # handle the same as a hidden room for now
+        self.roomHidden(room)
+
+    def roomHidden(self, room):
+        """Called by the Controller when a room was hidden by the user."""
+        self.m_logger.debug("room hidden: {}".format(room.getName()))
+        self.m_room_states.pop(room.getID())
+        self._updateRoomBox()
+
+    def roomOpened(self, room):
+        """Called by the Controller when a room was opened by the user."""
+        self.m_logger.debug("room opened: {}".format(room.getName()))
+        self.m_room_states[room.getID()] = RoomState.ATTENTION
+        self._updateRoomBox()
+
+    def newDirectChatUserStatus(self, status_event):
+        """Called by the Controller when the user status for the peers of one
+        of our visible direct chats changed."""
+        self.m_logger.debug("direct chat user status changed: {}: {}".format(
+            status_event.getUsername(),
+            status_event.getUserPresenceStatus().value)
+        )
+        self._updateRoomBox()
+
+    def selectThread(self, thread_nr):
+        """Selects a new default thread to participate in.
+
+        :param int thread_nr: The consecutive msg nr# of the thread to select.
+        """
+        root_id = self.getMsgIDForNr(thread_nr)
+        self.m_controller.selectThread(root_id)
+        self._updateCmdInputPrompt()
+
+    def leaveThread(self):
+        """Leave a previously selected default thread."""
+        self.m_controller.leaveThread()
+        self.m_cmd_input.resetPrompt()
+
+    def mainLoop(self):
+        """The urwid main loop that processes UI and Controller events."""
+
+        self.m_urwid_pipe = self.m_loop.watch_pipe(self._externalEvent)
+
+        self.m_controller.start(self._getRows())
+        default_room = self.m_config["default_room"]
+
+        if default_room:
+            if not self.m_controller.selectRoomBySpec(default_room):
+                self.m_logger.warning("Could not find default_room {}".format(default_room))
+                default_room = None
+
+        if not default_room:
+            self.m_controller.selectAnyRoom()
+
+        self._updateMainHeading()
+
+        try:
+            self.m_loop.run()
+        except KeyboardInterrupt:
+            pass
+
+        self.m_controller.stop()
+        os.close(self.m_urwid_pipe)

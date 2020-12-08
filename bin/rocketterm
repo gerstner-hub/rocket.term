@@ -1,0 +1,25 @@
+#!/usr/bin/python3
+# vim: ts=4 et sw=4 sts=4 :
+
+# stdlib
+import locale
+
+try:
+    import module_helper  # noqa: F401
+except ModuleNotFoundError:
+    pass
+
+from rocketterm.terminal import terminal, print_colored
+import rocketterm.main
+
+try:
+    locale.setlocale(locale.LC_ALL, '')
+    rt = rocketterm.main.RocketTerm()
+    rt.run()
+except Exception as e:
+    terminal.printError("Exception occured:", e)
+    raise
+except KeyboardInterrupt:
+    import sys
+    print_colored("\nUser abort", color="yellow", file = sys.stderr)
+    sys.exit(2)

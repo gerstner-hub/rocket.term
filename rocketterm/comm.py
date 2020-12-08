@@ -1,0 +1,461 @@
+# vim: ts=4 et sw=4 sts=4 :
+
+import logging
+
+# rocket.term
+import rocketterm.types
+import rocketterm.utils
+import rocketterm.realtime
+import rocketterm.rest
+
+
+class RocketComm:
+    """An abstraction layer that merges the available Rocket.Chat APIs into a
+    single interface.
+
+    Application logic should only ever access this interface here to perform
+    Rocket.Chat operations. You need to call connect() and login() before any
+    other functions can be used.
+    """
+
+    def __init__(self, server, login_data):
+        """:param login_data: An instance of PasswordLoginData or
+        TokenLoginData to be used during login()."""
+        self._reset()
+        self.m_logger = logging.getLogger("comm")
+        self.m_server = server
+        self.m_login_data = login_data
+
+        self.m_rt_session = rocketterm.realtime.RealtimeSession(server)
+        self.m_rest_session = rocketterm.rest.RestSession(server)
+
+    def _reset(self):
+        self.m_logged_in = False
+        # this will store subscriptions IDs as keys as they are returned from
+        # RealtimeSession.subscribe and map them to EventSubscription
+        # instances. This is needed to keep track of callbacks to be invoked
+        # upon events and for being able to unsubscribe from event
+        # subscriptions later on.
+        self.m_subscriptions = {}
+
+    def _subscriptionCB(self, sub_state, collection, event, data):
+        """Generical callback function that is called for all type of realtime
+        API subscription events.
+
+        This function will forward the event to more specialized callback
+        handlers and finally to the registered client callbacks.
+        """
+
+        client_cb = self.m_subscriptions[sub_state.getSubID()]
+
+        if collection == "stream-room-messages":
+            self._streamRoomMessagesCB(client_cb, collection, event, data)
+        elif collection == "stream-notify-user":
+            self._streamNotifyUserCB(client_cb, collection, event, data)
+        elif collection == "stream-notify-logged":
+            self._streamNotifyLoggedCB(client_cb, collection, event, data)
+        else:
+            raise Exception("Yet unsupported event collection")
+
+    def _streamRoomMessagesCB(self, client_cb, collection, event, data):
+        # split-up each message into its own callback event
+        for item in data:
+            info = rocketterm.types.RoomMessage(item)
+            client_cb(collection, event, info)
+
+    def _streamNotifyUserCB(self, client_cb, collection, event, data):
+        change, item = data
+        _id, evname = event.split('/', 1)
+
+        if evname == "subscriptions-changed":
+            info = rocketterm.types.SubscriptionInfo(item)
+        elif evname == "rooms-changed":
+            # this is the room-only data without the subscription
+            # part, so we can't create a new room object with it
+            info = item
+        else:
+            raise Exception("Yet unsupported notify-user event")
+
+        client_cb(collection, change, event, info)
+
+    def _streamNotifyLoggedCB(self, client_cb, collection, event, data):
+        if event == "user-status":
+            for user_id, username, status, text in data:
+                presence = rocketterm.utils.createUserPresenceFromStatusIndicator(status)
+                status_event = rocketterm.types.UserStatusEvent(
+                    user_id, username, presence, text
+                )
+                client_cb(collection, event, status_event)
+        else:
+            raise Exception("Yet unsupported notify-logged event")
+
+    def _getUserInfo(self, resp):
+        """Extract user information from API responses and returns a UserInfo
+        instance for it."""
+
+        user = resp["user"]
+
+        if "lastlogin" in user:
+            # seems to be for the locally logged in user
+            ret = rocketterm.types.LocalUserInfo(user)
+        else:
+            ret = rocketterm.types.UserInfo(user)
+
+        return ret
+
+    def connect(self):
+        """Connect to the RC APIs.
+
+        This process only creates a network connection to the remote server
+        but does not authenticate yet."""
+        self.m_rt_session.connect()
+
+    def close(self):
+        """Close all RC API sessions and reset all state."""
+        self.m_rt_session.close()
+        self.m_rest_session.close()
+        self._reset()
+
+    def isLoggedIn(self):
+        """Returns whether the configured user is currently logged in on the
+        server."""
+        return self.m_rt_session.isLoggedIn() and self.m_rest_session.isLoggedIn()
+
+    def login(self):
+        """Performs a login operation on all required APIs.
+
+        This call attempts to authenticate with the RC APIs using the login
+        data specified during construction time. On error an exception is
+        thrown.
+        """
+
+        self.m_rt_session.login(self.m_login_data.getRealtimeLoginParams())
+        user_info = self.m_rest_session.login(self.m_login_data.getRESTLoginParams())
+
+        self.m_our_user_id = user_info["_id"]
+        self.m_email = user_info["email"]
+        self.m_full_name = user_info["name"]
+        self.m_username = user_info["username"]
+
+    def logout(self):
+        """Performs a logout operation on all required APIs.
+
+        This basically undoes the login() operation.
+        """
+        if self.m_login_data.needsLogout():
+            self.m_rt_session.logout()
+            self.m_rest_session.logout()
+        self.m_email = None
+        self.m_full_name = None
+
+    def getServer(self):
+        """Returns the configured server name."""
+        return self.m_server
+
+    def getUsername(self):
+        """Returns the username of the logged in user."""
+        return self.m_username
+
+    def getFullName(self):
+        """Returns the full friendly name of the logged in user."""
+        return self.m_full_name
+
+    def getEmail(self):
+        """Returns the mail address of the logged in user."""
+        return self.m_email
+
+    def getUserID(self):
+        """Returns the unique user ID of the logged in user."""
+        return self.m_our_user_id
+
+    def getLoggedInUserInfo(self):
+        """Returns a BasicUserInfo instance for the currently logged in
+        user."""
+        return rocketterm.types.BasicUserInfo.create(
+            self.m_our_user_id,
+            self.m_username,
+            self.m_full_name
+        )
+
+    def getJoinedRooms(self):
+        """Returns a list of room objects representing the rooms that the
+        currently logged in user is subscribed to."""
+        # we need to get two disctinct data items here, the joined rooms and
+        # the subscription info to create sensible objects.
+        rooms = self.m_rt_session.getJoinedRooms()['result']['update']
+        subscriptions = self.m_rt_session.getSubscriptions()['result']['update']
+        subscriptions = dict([(s['rid'], s) for s in subscriptions])
+        ret = []
+
+        for room in rooms:
+            r = rocketterm.utils.createRoom(room, subscriptions[room['_id']])
+            ret.append(r)
+
+        return ret
+
+    def getRoomMessages(self, room, num_msgs, older_than=None):
+        """Retrieves the RoomMessage objects for the given room object.
+
+        :param int num_msgs: maximum number of messages to return
+        :param RoomMessage older_than: if present then only messages
+                                       older than this one are returned.
+        :return: a tuple of (msgs_remaining, [RoomMessage, ...])
+        """
+
+        # it seem the client creation date is used here
+        # it's a bit unclear how this behaves wrt to threading, where
+        # new messages can appear out of order.
+        if older_than:
+            max_ts = older_than.getRaw()['ts']['$date']
+        else:
+            max_ts = None
+
+        history = self.m_rt_session.getRoomHistory(room.getID(), num_msgs, max_ts)
+
+        remaining = history['result']['unreadNotLoaded']
+        messages = [rocketterm.types.RoomMessage(m) for m in history['result']['messages']]
+
+        return (remaining, messages)
+
+    def getRoomMembers(self, room, max_items=50, offset=0):
+        """Retrieves the UserInfo for the members of the given room object.
+        This is only supported for group and channel room types, not for
+        direct chats (for obvious reasons)."""
+
+        if room.isPrivateChat():
+            resp = self.m_rest_session.getGroupMembers(room.getID(), max_items, offset)
+        elif room.isChatRoom():
+            resp = self.m_rest_session.getChannelMembers(room.getID(), max_items, offset)
+        else:
+            raise Exception("Unsupported room type: {}".format(room.typeLabel()))
+
+        members = resp["members"]
+        total = resp["total"]
+
+        return (total, [rocketterm.types.UserInfo(data) for data in members])
+
+    def getUserList(self):
+        """Retrieves a full list of users on the server. Returns a list of
+        BasicUserInfo instances."""
+
+        offset = 0
+
+        ret = []
+
+        while True:
+            try:
+                resp = self.m_rest_session.getUserList(offset=offset)
+            except rocketterm.types.HTTPError as e:
+                if e.isForbidden():
+                    raise rocketterm.types.ActionNotAllowed(
+                            "your account is not allowed to list users on the server")
+                raise
+
+            ret.extend([rocketterm.types.BasicUserInfo(info) for info in resp["users"]])
+
+            offset += len(resp["users"])
+
+            if offset >= resp["total"]:
+                break
+
+        return ret
+
+    def hideRoom(self, room):
+        """Hides the given room object, but does not unsubscribe from it. This
+        only changes the 'open' state of the room."""
+        self.m_rt_session.hideRoom(room.getID())
+
+    def openRoom(self, room):
+        """Opens the given room object, which needs to be already subscribed
+        to. This only changes the 'open' state of the room."""
+        self.m_rt_session.openRoom(room.getID())
+
+    def subscribeForRoomMessages(self, room, callback):
+        """Subscribe for asynchronous notification of new room message
+        events in the given room object.
+
+        :param callback: A callback function that will receive the new message
+                         as a parameter.
+        :return: An EventSubscription instance that can be used in
+                 unsubscribe() to stop asynchronous notifications again.
+        """
+        sub_state = self.m_rt_session.subscribe(
+            "stream-room-messages",
+            room.getID(),
+            self._subscriptionCB
+        )
+        self.m_subscriptions[sub_state.getSubID()] = callback
+        return sub_state
+
+    def subscribeForUserEvents(self, category, user, callback):
+        """Subscribe for asynchronous notification of user events like
+        new room memberships / subscriptions.
+
+        The ``callback`` function receives the following parameters:
+
+        - category: This will equal the ``category`` parameter used here.
+        - change_type: This will be a string like "updated", "removed",
+                       "inserted".
+        - event: This will a a string describing the event like
+          "<event-id>/<event-type>".
+        - data: This will be a dictionary containing the data that depends on
+          the occured event, e.g. the room ID and further room information for
+          the 'subscriptions-changed' category.
+
+        The category of the event, the change_type
+        which can be.  e.g. "updated" or "deleted" and the status_event
+
+        :param category: The event category to subscribe for, see
+                         RealtimeSession.NOTIFY_USER_EVENTS.
+                         'subscriptions-changed' will deliver notifications
+                         about new/removed room subscriptions. 'rooms-changed'
+                         will deliver notifications about e.g. room open/hide
+                         events.
+        :param user: The user object to subscribe for.
+        :param callback: A callback function that will receive the
+                         asynchronous events. See the detailed description for
+                         more information.
+        :return: An EventSubscription instance that can be used in
+                 unsubscribe() to stop asynchronous notifications again.
+        """
+
+        if category not in self.m_rt_session.NOTIFY_USER_EVENTS:
+            raise Exception("Invalid user event category: {}".format(category))
+
+        sub_state = self.m_rt_session.subscribe(
+            "stream-notify-user",
+            "{}/{}".format(user.getID(), category),
+            self._subscriptionCB
+        )
+        self.m_subscriptions[sub_state.getSubID()] = callback
+        return sub_state
+
+    def subscribeForLoggedEvents(self, category, callback):
+        """Subscribe for asynchronous notification of events for
+        "logged" users.
+
+        It isn't fully clear what a "logged user" is from the RC
+        documentation. It seems like it refers to all currently logged in
+        users on the server. It seems not to be possible to limit the accounts
+        one is interested in which means that this creates quite a lot of
+        traffic for larger RC instances.
+
+        The callback will receive three parameters:
+
+        - category: This will equal the ``category`` parameter used here.
+        - change_type: This will be a string like "updated", "removed",
+                       "inserted".
+        - event_data: This will be a UserStatusEvent instance for the
+                      'user-status' category.
+
+        :param str category: The event category to subscribe for, see
+                         RealtimeSession.LOGGED_USERS_EVENTS. 'user-status'
+                         will deliver events when a user's online status
+                         changed. Other categories are currently not
+                         supported.
+        :param callback: The callback function which will be called upon an
+                         asynchronous event. See the detailed description for
+                         more information.
+        :return: An EventSubscription instance that can be used in
+                 unsubscribe() to stop asynchronous notifications again.
+        """
+
+        if category not in self.m_rt_session.LOGGED_USERS_EVENTS:
+            raise Exception("Invalid logged users event category: {}".format(category))
+
+        sub_state = self.m_rt_session.subscribe(
+            "stream-notify-logged",
+            category,
+            self._subscriptionCB
+        )
+        self.m_subscriptions[sub_state.getSubID()] = callback
+        return sub_state
+
+    def unsubscribe(self, sub_state):
+        """Unsubscribes from a previously established event subscrption.
+
+        :param EventSubscription sub_state: The data that was previously
+          returned from e.g. subscribeForRoomMessages or one of the other
+          subscribe functions.
+        """
+        self.m_rt_session.unsubscribe(sub_state)
+        self.m_subscriptions.pop(sub_state.getSubID())
+
+    def sendMessage(self, room, msg, thread_id=None):
+        """Sends a new chat message into a room object.
+
+        On failure to send the message an exception is thrown. You should wait
+        for a new room message event in the room (see
+        subscribeForRoomMessage()) before rendering the message, because the
+        server might change some aspects of the message before it is actually
+        posted in the room.
+
+        :param room: The room object where the new message should be sent to.
+        :param str msg: The plaintext that comprises the new message.
+        :param str thread_id: The optional thread this message should be a
+                              part of.  This needs to be the thread root
+                              message's id as returned from
+                              RoomMessage.getID().
+        """
+        self.m_rt_session.sendMessage(room.getID(), msg, thread_id)
+
+    def getUserInfoByID(self, uid):
+        """Retrieves a UserInfo structure for the given user ID from the
+        server."""
+        resp = self.m_rest_session.getUserInfo(uid)
+        return self._getUserInfo(resp)
+
+    def getUserInfoByName(self, username):
+        """Retrieves a UserInfo structure for the given username from the
+        server."""
+        resp = self.m_rest_session.getUserInfo(username=username)
+        return self._getUserInfo(resp)
+
+    def getUserInfo(self, user):
+        """Retrieves a full UserInfo structure for the given partial UserInfo
+        structure."""
+        return self.getUserInfoByID(user.getID())
+
+    def getUserStatus(self, user):
+        """Retrieves a UserStatus structure for the given user object from the
+        server."""
+        ret = self.m_rest_session.getUserStatus(user.getID())
+
+        return rocketterm.types.UserStatus(ret)
+
+    def setUserStatus(self, status, message):
+        """Sets a new user status for the currently logged in user.
+
+        :param UserPresence status: A value from the UserPresence enum to set
+                                    the status to.
+        :param str message: The status message to be displayed for other
+                            users.
+        """
+        self.m_rest_session.setUserStatus(status.value, message)
+
+    def setRoomTopic(self, room, topic):
+        """Sets a new room topic for the given room object.
+
+        Note that changing the topic requires special permissions. If these
+        permissions are not present then an ActionNowAllowed exception will be
+        thrown.
+
+        :param room: The room object for which to change the topic.
+        :param str topic: The new string to set as topic.
+        """
+        self.m_rt_session.setRoomTopic(room.getID(), topic)
+
+    def createDirectChat(self, user):
+        """Creates a new direct chat room to talk to the given user.
+
+        Direct chats are handled specially in RC. You cannot
+        subscribe/unsubscribe them, you can only create them and afterwards
+        all you can do is "hiding" them again.
+
+        If the direct chat with the given ``user`` already exists then this
+        call will still succeed and return the appropriate room information.
+
+        :param UserInfo user: The UserInfo instance of the user to talk to.
+        """
+        resp = self.m_rt_session.createDirectChat(user.getUsername())
+        return resp["result"]["rid"]
