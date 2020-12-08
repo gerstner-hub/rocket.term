@@ -192,6 +192,9 @@ class Controller:
         for mention in msg.getMentions():
             if mention.getID() == self.m_comm.getUserID():
                 return True
+            elif mention.getID() == "all":
+                # this is the @all mention
+                return True
 
         return False
 
