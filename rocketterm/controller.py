@@ -519,6 +519,8 @@ class Controller:
         # changes. so actively poll from the REST API then ...
         # TODO: this would be worth further investigation and maybe creating
         # an RC upstream issue.
+        # this has been fixed in a newer RC server version already in commit
+        # 287d1dcb376a4613c9c2d6f5b9c22f3699891d2e (version 3.7.0)
         self.m_comm.setUserStatus(presence, message)
 
         our_id = self.m_local_user_info.getID()
