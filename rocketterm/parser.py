@@ -24,6 +24,7 @@ class Command(Enum):
     SelectThread = "thread"
     LeaveThread = "nothread"
     ChatWith = "chatwith"
+    JumpToMessage = "jump"
 
 
 # the first format placeholder will receive the actual command name
@@ -41,7 +42,8 @@ USAGE = {
     Command.SetRoomTopic: "/{} TOPIC: Changes the topic of the current room",
     Command.SelectThread: "/{} #MSGSPEC: selects a thread to participate in by default. Leave again with /nothread.",
     Command.LeaveThread: "/{}: leaves a previously selected thread.",
-    Command.ChatWith: "/{} @USERSPEC: create and select a new direct chat with the given user."
+    Command.ChatWith: "/{} @USERSPEC: create and select a new direct chat with the given user.",
+    Command.JumpToMessage: "/{} #MSGSPEC: jumps/scrolls to the select message number in the current room."
 }
 
 
@@ -491,39 +493,41 @@ class Parser:
 
         self.m_controller.sendMessage(args[0])
 
-    def _processThreadArg(self, arg):
+    def _processMsgNrArg(self, arg):
         msg_count = self.m_controller.getRoomMsgCount()
 
         if msg_count == 0:
-            raise ParseError("No threads existing in this room")
+            raise ParseError("No messages existing in this room")
 
-        thread_id = arg
-        if not thread_id.startswith('#'):
+        msg_nr = arg
+        if not msg_nr.startswith('#'):
             raise ParseError("Invalid #MSGSPEC, expected something like #4711")
 
-        thread_id = thread_id.lstrip('#')
+        msg_nr = msg_nr.lstrip('#')
 
-        if not thread_id.isnumeric():
-            raise ParseError("#MSGSPEC '{}' is not numerical".format(thread_id))
+        if not msg_nr.isnumeric():
+            raise ParseError("#MSGSPEC '{}' is not numerical".format(msg_nr))
 
-        thread_id = int(thread_id)
+        msg_nr = int(msg_nr)
 
-        if thread_id < 1 or thread_id > msg_count:
+        if msg_nr < 1 or msg_nr > msg_count:
             raise ParseError("Message #{} is out of range. The allowed range is #1 ... #{}".format(
-                thread_id, msg_count
+                msg_nr, msg_count
             ))
 
         # since Screen handles the mapping between actual and displayed msg
         # IDs we need to consult it.
-        root_id = self.m_screen.getMsgIDForNr(thread_id)
-
-        return thread_id, root_id
+        return msg_nr
 
     def _handleReply(self, args):
         if len(args) != 2:
             return "Invalid number of arguments: Example: /reply #5 'my reply text'"
 
-        thread_id, root_id = self._processThreadArg(args[0])
+        thread_nr = self._processMsgNrArg(args[0])
+        try:
+            root_id = self.m_screen.getMsgIDForNr(thread_nr)
+        except Exception:
+            return "Error: thread #{} not yet cached".format(thread_nr)
 
         self.m_comm.sendMessage(
             self.m_controller.getSelectedRoom(),
@@ -531,7 +535,7 @@ class Parser:
             thread_id=root_id
         )
 
-        return "Replied in thread #{}".format(thread_id)
+        return "Replied in thread #{}".format(thread_nr)
 
     def _handleTopic(self, args):
         if len(args) != 1:
@@ -548,10 +552,10 @@ class Parser:
         if len(args) != 1:
             return "Invalid number of arguments. Example: /select #7"
 
-        thread_id, _ = self._processThreadArg(args[0])
+        thread_nr = self._processMsgNrArg(args[0])
 
-        self.m_screen.selectThread(thread_id)
-        return "Now writing in thread #{}".format(thread_id)
+        self.m_screen.selectThread(thread_nr)
+        return "Now writing in thread #{}".format(thread_nr)
 
     def _handleNothread(self, args):
         if args:
@@ -589,3 +593,16 @@ class Parser:
 
         self.m_comm.createDirectChat(peer_info)
         return "Created new direct chat {}".format(args[0])
+
+    def _handleJump(self, args):
+        if len(args) != 1:
+            return "Invalid number of arguments. Example: /jump #815"
+
+        nr = self._processMsgNrArg(args[0])
+
+        try:
+            self.m_screen.scrollToMessage(nr)
+        except Exception as e:
+            return "Failed with: {}".format(str(e))
+
+        return "Jumped to #{}".format(nr)

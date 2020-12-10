@@ -1051,6 +1051,31 @@ class Screen:
         self.m_controller.leaveThread()
         self.m_cmd_input.resetPrompt()
 
+    def scrollToMessage(self, msg_nr):
+        """Scrolls the current chat box to the given msg nr#.
+
+        This may involve the need to load additional chat history and thus
+        introduce load times.
+        """
+        existing_msgs = self.m_controller.getRoomMsgCount()
+
+        if msg_nr <= 0 or msg_nr > existing_msgs:
+            raise Exception("msg #nr out of range")
+
+        while msg_nr < self._getOldestLoadedMsgNr():
+            # load more chat history
+            new_msgs = self._loadMoreChatHistory()
+            new_msgs += self._resolveThreadMessages()
+
+        row_nr = self._getMsgRowNr(msg_nr)
+        row = self.m_chat_box.body[row_nr]
+        self.m_logger.warning("scroll to message in row {}: {}".format(row_nr, row))
+
+        self.m_chat_box.set_focus_valign("top")
+        self.m_chat_box.set_focus(row_nr)
+
+        self.m_logger.warning("Scrolling to nr. {}: {}".format(row_nr, self.m_chat_box.body[row_nr]))
+
     def mainLoop(self):
         """The urwid main loop that processes UI and Controller events."""
 
