@@ -353,6 +353,13 @@ class Screen:
         self.m_msg_nr_map = {}
         # maps consecutive msg nr# to msg IDs
         self.m_msg_id_map = {}
+        # maps message nrs. to listbox rows
+        self.m_msg_nr_row_map = {}
+        # offset to add to values stored in m_msg_nr_row_map,
+        # see _recordMsgNr() for a detailed explanation
+        self.m_row_offset = 0
+        self.m_row_index_bottom = 0
+        self.m_row_index_top = -1
         # a mapping of thread parent msg IDs to a list of consecutive
         # numbers of chat messages waiting for the parent message to
         # be resolved
@@ -590,13 +597,55 @@ class Screen:
         else:
             return "unsupported special message type {}: {}".format(str(_type), raw_message)
 
-    def _recordMsgNr(self, nr, msg):
+    def _recordMsgNr(self, nr, msg, at_end):
         # we need to keep a list here, because with message editing
         # the same message ID can get multiple consecutive nrs#
         nr_list = self.m_msg_nr_map.setdefault(msg.getID(), [])
         if not msg.isIncrementalUpdate():
             nr_list.append(nr)
         self.m_msg_id_map[nr] = msg.getID()
+
+        # the business of keeping track of into which row a msg nr# went is
+        # quite complicated. Since we have a linear list and we start out with
+        # only a part of the history and we don't know how many rows there
+        # will be in the end, because there will be date bars added or dynamic
+        # message updates during runtime, we can't use random access with
+        # indices to find the correct row for a message.
+
+        # using a simple map of msg nr# to row nr also doesn't work since we
+        # append and prepend messages from both ends of the list, thus the
+        # indices don't stay the same over time.
+
+        # to deal with this we use a bit of complicated bookeeping here:
+        # - row_index_bottom is the next index value to assign to newly added
+        #   rows at the bottom
+        # - row_index_top is the next index value to assign to newly prepended
+        #   rows at the top of the list (thinking of the chat box top/bottom,
+        #   not the list start/end here).
+        # - each time we prepend a message, we need to increment the
+        #   row_offset.
+        #
+        # Now to find the correct row nr. we need to lookup the index stored
+        # in the map and add the current offset to it.
+
+        if at_end:
+            self.m_msg_nr_row_map[nr] = self.m_row_index_bottom
+            self._addedToChatBoxBottomRow(1)
+        else:
+            self.m_msg_nr_row_map[nr] = self.m_row_index_top
+            self._addedToChatBoxTopRow(1)
+
+    def _addedToChatBoxTopRow(self, num):
+        self.m_row_index_top -= num
+        self.m_row_offset += num
+
+    def _addedToChatBoxBottomRow(self, num):
+        self.m_row_index_bottom += num
+
+    def _getMsgRowNr(self, nr):
+        base_nr = self.m_msg_nr_row_map[nr]
+
+        return base_nr + self.m_row_offset
 
     def _checkUpdateThreadChilds(self, thread_nr, thread_msg):
         if thread_msg.isIncrementalUpdate():
@@ -607,8 +656,7 @@ class Screen:
             self._updateThreadChildMessage(thread_nr, waiter_consecutive_nr)
 
     def _updateThreadChildMessage(self, thread_nr, child_nr):
-        full_msg_count = self.m_controller.getRoomMsgCount()
-        oldest_msg_nr = full_msg_count - self.m_num_chat_msgs + 1
+        oldest_msg_nr = self._getOldestLoadedMsgNr()
         rough_child_index = child_nr - oldest_msg_nr
 
         for index in range(rough_child_index, len(self.m_chat_box.body)):
@@ -679,7 +727,7 @@ class Screen:
         # TODO: it would be better to to a first pass over all
         # messages to resolve IDs and only then start building the
         # actual message entries here.
-        self._recordMsgNr(nr, msg)
+        self._recordMsgNr(nr, msg, at_end)
         self._checkUpdateThreadChilds(nr, msg)
 
         msg_nr = '#{} '.format(str(nr).rjust(msg_nr_width))
@@ -769,11 +817,20 @@ class Screen:
             else:
                 to_add = to_add + [date_text]
 
-        for item in to_add:
-            if at_end:
-                self.m_chat_box.body.append(item)
-            else:
-                self.m_chat_box.body[0:0] = [item]
+        # we need to adjust our bookkeeping if e.g. a date bar was added
+        num_extra_items = len(to_add) - 1
+        if at_end:
+            self._addedToChatBoxBottomRow(num_extra_items)
+            self.m_chat_box.body.extend(to_add)
+        else:
+            self._addedToChatBoxTopRow(num_extra_items)
+            self.m_chat_box.body[0:0] = reversed(to_add)
+            if num_extra_items:
+                # hacky area: correct the bookkeeping, since we didn't add the
+                # message at the expected index by prepending a date bar
+                # first. TODO: make this cleaner somehow, e.g. bi first
+                # creating the date bar and then deal with the actual message
+                self.m_msg_nr_row_map[msg_nr] -= 1
 
     def _getDateText(self, date):
         centered_date = date.strftime("%x").center(self.m_chat_box.getNumCols())
@@ -872,14 +929,6 @@ class Screen:
     def _clearStatusMessages(self):
         self.m_status_box.body.clear()
 
-    def getMsgIDForNr(self, msg_nr):
-        """Returns the msg ID for a consecutive msg nr#."""
-        return self.m_msg_id_map[msg_nr]
-
-    def getNrsForMsgID(self, msg_id):
-        """Returns a list of consecutive msg nrs# for a msg ID."""
-        return self.m_msg_nr_map[msg_id]
-
     def _updateCmdInputPrompt(self):
         """Chooses an appropriate command input prompt for the current
         application status."""
@@ -889,6 +938,17 @@ class Screen:
             self.m_cmd_input.addPrompt("[#{}]".format(nrs[0]))
         else:
             self.m_cmd_input.resetPrompt()
+
+    def _getOldestLoadedMsgNr(self):
+        return self.m_controller.getRoomMsgCount() - self.m_num_chat_msgs + 1
+
+    def getMsgIDForNr(self, msg_nr):
+        """Returns the msg ID for a consecutive msg nr#."""
+        return self.m_msg_id_map[msg_nr]
+
+    def getNrsForMsgID(self, msg_id):
+        """Returns a list of consecutive msg nrs# for a msg ID."""
+        return self.m_msg_nr_map[msg_id]
 
     def newRoomSelected(self):
         """Called by the Controller when a new room was selected."""
