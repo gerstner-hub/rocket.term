@@ -369,22 +369,22 @@ class Screen:
         # be resolved
         self.m_waiting_for_thread_parent = {}
         messages = self.m_controller.getCachedRoomMessages()
-        msg_count = self.m_controller.getRoomMsgCount()
+        self.m_room_msg_count = self.m_controller.getRoomMsgCount()
 
         self.m_logger.debug(
             "Updating chat box, currently cached: {}, complete count: {}".format(
                 len(messages),
-                msg_count
+                self.m_room_msg_count
             )
         )
 
         self.m_chat_frame.contents["header"] = self._getRoomHeading()
 
-        if not msg_count:
+        if not self.m_room_msg_count:
             return
 
         for nr, msg in enumerate(messages):
-            self._addChatMessage(msg_count - nr, msg_count, msg)
+            self._addChatMessage(msg, at_end=False)
 
         self._resolveThreadMessages()
         self._scrollMessages(ScrollDirection.NEWEST)
@@ -396,11 +396,15 @@ class Screen:
         )
 
     def _resolveThreadMessages(self):
-        # For the hacky approach that resolves thread messages lazily
-        # we need to check whether any unresolved messages remain when
-        # we load more messages on demand.
+        # To resolve thread messages lazily we need to check whether any
+        # unresolved messages remain when we load more messages on demand.
+        #
         # If this is the case, load more chat history until no
-        # unresolved messages remain.
+        # unresolved messages remain. In the worst case this could mean we
+        # need to load the complete chat history ... an alternative would be
+        # to only resolve thread IDs once we actually display unknown threads
+        # ... but the chat_box is not really helping much in getting to know
+        # which messages are *actually* currently displayed.
 
         extra_msgs = 0
 
@@ -409,6 +413,10 @@ class Screen:
 
             if new_msgs == 0:
                 self.m_logger.warning("Failed to resolve some thread messages")
+                for parent, childs in self.m_waiting_for_thread_parent.items():
+                    self.m_logger.warning("Waiting for #{}: {}".format(
+                        parent, ', '.join(['#' + str(cid) for cid in childs])
+                    ))
                 break
 
             extra_msgs += new_msgs
@@ -464,35 +472,33 @@ class Screen:
         """
         more_msgs = self.m_controller.loadMoreRoomMessages()
 
-        if not more_msgs:
-            return 0
-
-        msg_count = self.m_controller.getRoomMsgCount()
-        start_nr = msg_count - self.m_num_chat_msgs
-
         for nr, msg in enumerate(more_msgs):
-            self._addChatMessage(start_nr - nr, msg_count, msg)
+            self._addChatMessage(msg, at_end=False)
 
         return len(more_msgs)
 
-    def _getThreadLabel(self, consecutive_nr, full_msg_count, msg):
-        tid_width = len(str(full_msg_count + 1))
+    def _getThreadLabel(self, msg, consecutive_nr):
+        max_width = self._getMaxMsgNrWidth()
         parent = msg.getThreadParent()
-        if parent:
-            parent_nr = self.m_msg_nr_map.get(parent, [-1])[0]
-            if parent_nr == -1:
-                waiters = self.m_waiting_for_thread_parent.setdefault(parent, [])
-                waiters.append(consecutive_nr)
-                # use a marker that we can later
-                # replace when we know the thread nr.
-                parent_nr = ' ' * tid_width
-            label = " #{}]".format(str(parent_nr).rjust(tid_width))
-        else:
-            label = (tid_width + 3) * ' '
 
-        return label
+        if not parent:
+            # three extra characters for the two spaces and the '#'
+            return (max_width + 3) * ' '
 
-    def _getMessageText(self, msg, consecutive_nr, full_msg_count):
+        parent_nr = self.m_msg_nr_map.get(parent, [None])[0]
+        if parent_nr is None:
+            # we don't know the thread parent yet ... fill in a placeholder
+            # that we can later replace when we encounter the thread parent
+            # message
+            waiters = self.m_waiting_for_thread_parent.setdefault(parent, [])
+            waiters.append(consecutive_nr)
+            # use a marker that we can later
+            # replace when we know the thread nr.
+            parent_nr = '?' * max_width
+
+        return " #{} ".format(str(parent_nr).rjust(max_width))
+
+    def _getMessageText(self, msg, consecutive_nr):
         """Transforms the message's text into a sensible message, if
         it is a special message type.
 
@@ -538,9 +544,8 @@ class Screen:
                 if nrs:
                     label = "[#{}]".format(nrs[0])
                 else:
-                    # TODO: same hack as with thread IDs
-                    tid_width = len(str(full_msg_count + 1))
-                    label = "[#{})".format(' ' * tid_width)
+                    max_width = self._getMaxMsgNrWidth()
+                    label = "[#{}]".format('?' * max_width)
                     waiters = self.m_waiting_for_thread_parent.setdefault(msg.getID(), [])
                     waiters.append(consecutive_nr)
                 text = "{}: {}".format(label, msg.getMessage())
@@ -649,10 +654,8 @@ class Screen:
 
         if at_end:
             self.m_msg_nr_row_map[nr] = self.m_row_index_bottom
-            self._addedToChatBoxBottomRow(1)
         else:
             self.m_msg_nr_row_map[nr] = self.m_row_index_top
-            self._addedToChatBoxTopRow(1)
 
     def _addedToChatBoxTopRow(self, num):
         self.m_row_index_top -= num
@@ -675,102 +678,84 @@ class Screen:
             self._updateThreadChildMessage(thread_nr, waiter_consecutive_nr)
 
     def _updateThreadChildMessage(self, thread_nr, child_nr):
-        oldest_msg_nr = self._getOldestLoadedMsgNr()
-        rough_child_index = child_nr - oldest_msg_nr
+        """Replaces the placeholder added in _getThreadLabel() earlier by the
+        actual thread ID that we now know."""
+        child_index = self._getMsgRowNr(child_nr)
+        row = self.m_chat_box.body[child_index]
+        text = row.text
 
-        for index in range(rough_child_index, len(self.m_chat_box.body)):
-            candidate = self.m_chat_box.body[index]
-            text = candidate.text
+        if len(text) < 2 or not text.startswith("#"):
+            self.m_logger.warning(
+                "thread child msg has unexpected content: {}".format(text)
+            )
+            return
 
-            if len(text) < 2 or not text.startswith("#"):
-                continue
+        try:
+            msg_nr = int(text[1:].split(None, 1)[0])
+            if msg_nr != child_nr:
+                raise Exception("mismatched child #nr")
+        except Exception:
+            self.m_logger.warning(
+                "couldn't verify child msg nr in: {}".format(text)
+            )
+            return
 
-            try:
-                msg_nr = int(text[1:].split()[0])
-                if msg_nr != child_nr:
-                    continue
-            except ValueError:
-                continue
+        max_width = self._getMaxMsgNrWidth()
 
-            # okay we now know that this is the message we're
-            # looking for.
-            replace_str = '{} '.format(str(thread_nr))
-            needle = '{}]'.format(' ' * (len(replace_str) - 1))
+        # okay we now know that this is the message we're looking for.
+        replace_str = '#{}'.format(str(thread_nr).rjust(max_width))
+        needle = '#{}'.format('?' * (len(replace_str) - 1))
 
-            new_text = text.replace(needle, replace_str, 1)
+        new_text = text.replace(needle, replace_str, 1)
 
-            # this would be for incremental updates (mentionings)
-            replace_str = '{}]'.format(str(thread_nr))
-            needle = '{})'.format(' ' * (len(replace_str) - 1))
+        if new_text == text:
+            self.m_logger.warning(
+                "couldn't replace placeholder in child msg: {}".format(text)
+            )
 
-            new_text = new_text.replace(needle, replace_str, 1)
+        # this messes with the internals of urwid.Text, but
+        # there's no good other way, we'd need to reconstruct
+        # all the attributes for coloring etc.
+        # we make sure that the length of the text message is
+        # not changing, otherwise the markup would not be
+        # correct any more
+        row._text = new_text
 
-            # this messes with the internals of urwid.Text, but
-            # there's no good other way, we'd need to reconstruct
-            # all the attributes for coloring etc.
-            # we make sure that the length of the text message is
-            # not changing, otherwise the markup would not be
-            # correct any more
-            candidate._text = new_text
+    def _getMaxMsgNrWidth(self):
+        return len(str(self.m_room_msg_count + 1))
 
-            break
-        else:
-            self.m_logger.warn("Couldn't find thread child message #{}".format(child_nr))
+    def _formatChatMessage(self, msg, nr):
+        """Returns an urwid widget representing the fully formatted chat
+        messsage.
 
-    def _addChatMessage(self, nr, full_msg_count, msg, at_end=False):
-        """Adds a chat message to the current chat box.
-
-        :param int nr: The consecutive message nr to use, if known, otherwise
-                       pass -1 and it is assumed that this is a new message
-                       with at_end == True.
-        :params full_msg_count: The total number of messages existing in the
-                                room (not necessarily cached).
-        :params RoomMessage msg: The message object to process.
-        :params bool at_end: Whether the message is to be appended at the end,
-                             or prepended at the beginning of the box.
+        :param RoomMessage msg: The message to format.
+        :param int nr: The consecutive msg nr. for the message.
         """
-        username = msg.getUserInfo().getUsername()
-        user_color = self._getUserColor(username)
-        msg_nr_width = len(str(full_msg_count + 1))
-        if nr == -1:
-            nr = full_msg_count
 
-        # remember which consecutive number this message has in our chat
-        # box so that we can reference it later on if threaded
-        # messages occur
-        # this is quite a hack, because we usually encounter the
-        # thread child messages first so we can't know the consecutive
-        # number the thread parent will have in the future. Mark these
-        # lost thread child messages so we can update the message text
-        # in a second pass as we encounter the parent messages
-        # TODO: it would be better to to a first pass over all
-        # messages to resolve IDs and only then start building the
-        # actual message entries here.
-        self._recordMsgNr(nr, msg, at_end)
-        self._checkUpdateThreadChilds(nr, msg)
-
-        msg_nr = '#{} '.format(str(nr).rjust(msg_nr_width))
+        nr_label = '#{} '.format(str(nr).rjust(self._getMaxMsgNrWidth()))
         timestamp = msg.getCreationTimestamp().strftime("%X")
+        username = msg.getUserInfo().getUsername()
         userprefix = " {}: ".format(username.rjust(15))
-        thread_id = self._getThreadLabel(nr, full_msg_count, msg)
-        prefix_len = len(msg_nr) + len(timestamp) + len(userprefix) + len(thread_id)
+        thread_id = self._getThreadLabel(msg, nr)
+
+        prefix_len = len(nr_label) + len(timestamp) + len(userprefix) + len(thread_id)
         messagewidth = max(self.m_chat_box.getNumCols(), 80) - prefix_len - 1
-        indentation_prefix = (' ' * prefix_len)
+        indentation = (' ' * prefix_len)
 
         # handle special message types by creating sensible text to
         # display, does nothing for normal messages
-        msg_text = self._getMessageText(msg, nr, full_msg_count)
+        msg_text = self._getMessageText(msg, nr)
 
         # the textwrap module is a bit difficult to tune ... we want
         # to maintain newlines from the original string, but enforce a
         # maximum line length while prefixing an indentation string to
         # each line starting from the second one.
         #
-        # maintaining the original newlines workds via
-        # `replace_whitestpace = False`, however then we don't get the
-        # lines split up in the result, when there are newlines
-        # contained in the original text. Therefore replace remaining
-        # newlines by the prefix afterwards.
+        # maintaining the original newlines works via
+        # `replace_whitespace = False`, however then we don't get the lines
+        # split up in the result, when there are newlines contained in the
+        # original text. Therefore replace remaining newlines by the prefix
+        # afterwards.
 
         lines = textwrap.wrap(
             msg_text,
@@ -779,29 +764,64 @@ class Screen:
         )
 
         if len(lines) > 1:
-            lines = lines[0:1] + [indentation_prefix + line for line in lines[1:]]
+            lines = lines[0:1] + [indentation + line for line in lines[1:]]
 
-        lines = [line.replace('\n', '\n' + indentation_prefix) for line in lines]
+        lines = [line.replace('\n', '\n' + indentation) for line in lines]
 
         message = '\n'.join(lines)
 
+        user_color = self._getUserColor(username)
+
         text = urwid.Text([
-            ('text', msg_nr),
+            ('text', nr_label),
             ('text', timestamp),
             ('text', thread_id),
             (urwid.AttrSpec(user_color, 'black'), userprefix),
             ('text', message)
         ])
 
+        return text
+
+    def _addChatMessage(self, msg, at_end):
+        """Adds a chat message to the current chat box.
+
+        :param int nr: The consecutive message nr to use, if known, otherwise
+                       pass -1 and it is assumed that this is a new message
+                       with at_end == True.
+        :params RoomMessage msg: The message object to process.
+        :params bool at_end: Whether the message is to be appended at the end,
+                             or prepended at the beginning of the box.
+        """
+        if at_end:
+            msg_nr = self.m_room_msg_count
+        else:
+            msg_nr = self.m_room_msg_count - self.m_num_chat_msgs
+
+        self._maybeInsertDateBar(msg, at_end)
+
+        # update not yet resolved thread child numbers we may now be able to
+        # resolve with this new message
+        self._checkUpdateThreadChilds(msg_nr, msg)
+        # remember which consecutive number this message has in our chat box
+        # so that we can reference it later on if threaded messages occur
+        self._recordMsgNr(msg_nr, msg, at_end)
+
         self.m_num_chat_msgs += 1
 
-        self._addMsgTextToChatBox(nr, msg, text, at_end)
+        text = self._formatChatMessage(msg, msg_nr)
 
-    def _addMsgTextToChatBox(self, msg_nr, msg, text, at_end):
-        """This finally adds fully formatted text to the chat box,
-        also handling date bar display if a day change occured."""
+        self._addRowToChatBox(text, at_end)
 
-        to_add = [text]
+        if msg_nr == 1:
+            # make sure if the oldest message is loaded that a date message is
+            # prepended in any case, so we know when the conversation in the
+            # room started
+            date_text = self._getDateText(msg.getCreationTimestamp().date())
+            self._addRowToChatBox(date_text, at_end=False)
+
+    def _maybeInsertDateBar(self, msg, at_end):
+        """If with the addition of the given message a date bar needs to be
+        prepended / appended, then this will be done."""
 
         if not self.m_oldest_chat_msg and not self.m_newest_chat_msg:
             self.m_oldest_chat_msg = msg
@@ -814,42 +834,26 @@ class Screen:
             compare_ts = self.m_oldest_chat_msg.getCreationTimestamp()
             self.m_oldest_chat_msg = msg
 
-        msg_ts = msg.getCreationTimestamp()
+        this_ts = msg.getCreationTimestamp()
 
-        if compare_ts.date() != msg_ts.date():
-            src_date = msg_ts.date() if at_end else compare_ts.date()
-            # the date of this message changed compared to the
-            # previous / next message, thus add a date information
-            # message.
+        if compare_ts.date() != this_ts.date():
+            src_date = this_ts.date() if at_end else compare_ts.date()
+            # the date of this message changed compared to the previous / next
+            # message, thus add a date information message.
             date_text = self._getDateText(src_date)
 
-            to_add = [date_text] + to_add
+            self._addRowToChatBox(date_text, at_end)
 
-        if msg_nr == 1:
-            # make sure if the oldest message is loaded that a
-            # date message is prepended in any case, so we know
-            # when the conversation in the room started
-            date_text = self._getDateText(msg_ts.date())
-
-            if at_end:
-                to_add = [date_text] + to_add
-            else:
-                to_add = to_add + [date_text]
+    def _addRowToChatBox(self, text, at_end):
+        """This finally adds fully formatted text to the chat box."""
 
         # we need to adjust our bookkeeping if e.g. a date bar was added
-        num_extra_items = len(to_add) - 1
         if at_end:
-            self._addedToChatBoxBottomRow(num_extra_items)
-            self.m_chat_box.body.extend(to_add)
+            self._addedToChatBoxBottomRow(1)
+            self.m_chat_box.body.append(text)
         else:
-            self._addedToChatBoxTopRow(num_extra_items)
-            self.m_chat_box.body[0:0] = reversed(to_add)
-            if num_extra_items:
-                # hacky area: correct the bookkeeping, since we didn't add the
-                # message at the expected index by prepending a date bar
-                # first. TODO: make this cleaner somehow, e.g. bi first
-                # creating the date bar and then deal with the actual message
-                self.m_msg_nr_row_map[msg_nr] -= 1
+            self._addedToChatBoxTopRow(1)
+            self.m_chat_box.body[0:0] = [text]
 
     def _getDateText(self, date):
         centered_date = date.strftime("%x").center(self.m_chat_box.getNumCols())
@@ -989,14 +993,13 @@ class Screen:
         self._updateMainHeading()
 
     def handleNewRoomMessage(self, msg):
-        """Called by the Controller when in one of our visible rooms a new
-        message appeared."""
+        """Called by the Controller when in a new message appeared in one of
+        our visible rooms."""
 
         room_id = msg.getRoomID()
 
         if room_id == self.m_current_room.getID():
-            msg_count = self.m_controller.getRoomMsgCount()
-            self._addChatMessage(-1, msg_count, msg, True)
+            self._addChatMessage(msg, at_end=True)
         else:
             if self.m_controller.doesMessageMentionUs(msg):
                 new_state = RoomState.ATTENTION
