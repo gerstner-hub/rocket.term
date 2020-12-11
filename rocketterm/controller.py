@@ -298,9 +298,9 @@ class Controller:
 
         room = self._getRoomToOperateOn(room)
         if not room:
-            return
+            return []
         elif room.getID() in self.m_history_complete:
-            return
+            return []
 
         msgs = self.m_room_msgs.setdefault(room.getID(), [])
         oldest_known = msgs[-1] if msgs else None
@@ -320,8 +320,7 @@ class Controller:
             room_members.add(user.getID())
             self._cacheUserInfo(user)
 
-        if new_msgs:
-            msgs.extend(new_msgs)
+        msgs.extend(new_msgs)
 
         self.m_room_msg_count.setdefault(room.getID(), remaining + len(msgs))
 
