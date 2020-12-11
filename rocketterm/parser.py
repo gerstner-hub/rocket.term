@@ -25,6 +25,7 @@ class Command(Enum):
     LeaveThread = "nothread"
     ChatWith = "chatwith"
     JumpToMessage = "jump"
+    ListDiscussions = "discussions"
 
 
 # the first format placeholder will receive the actual command name
@@ -43,7 +44,8 @@ USAGE = {
     Command.SelectThread: "/{} #MSGSPEC: selects a thread to participate in by default. Leave again with /nothread.",
     Command.LeaveThread: "/{}: leaves a previously selected thread.",
     Command.ChatWith: "/{} @USERSPEC: create and select a new direct chat with the given user.",
-    Command.JumpToMessage: "/{} #MSGSPEC: jumps/scrolls to the select message number in the current room."
+    Command.JumpToMessage: "/{} #MSGSPEC: jumps/scrolls to the select message number in the current room.",
+    Command.ListDiscussions: "/{}: lists available discussions in this room"
 }
 
 
@@ -606,3 +608,19 @@ class Parser:
             return "Failed with: {}".format(str(e))
 
         return "Jumped to #{}".format(nr)
+
+    def _handleDiscussions(self, args):
+        if len(args) != 0:
+            return "Invalid number of arguments. Expected no arguments."
+
+        discussions = self.m_comm.getRoomDiscussions(
+                self.m_controller.getSelectedRoom()
+        )
+
+        if not discussions:
+            return "No discussions existing in this room"
+
+        return "{} existing discussions: {}".format(
+            len(discussions),
+            ', '.join([d.typePrefix() + d.getFriendlyName() for d in discussions])
+        )

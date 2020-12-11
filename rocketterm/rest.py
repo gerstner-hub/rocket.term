@@ -244,6 +244,11 @@ class RestSession:
         resp = self._get("groups.list")
         return resp["groups"]
 
+    def getChannelInfo(self, rid):
+        """Returns the information about a specific room ID."""
+        resp = self._get("channels.info", url_params={"roomId": rid})
+        return resp["channel"]
+
     def getGroupMembers(self, group_id, count=50, offset=0):
         """Gets the current members of the private group with the
         given ID.
@@ -310,3 +315,21 @@ class RestSession:
         })
 
         return resp
+
+    def getDiscussions(self, rid, count=50, offset=0):
+        """Returns the discussions existing in the given room ID.
+
+        Discussions are modeled as private groups and are sub-rooms for the
+        given room.
+
+        :return: A tuple of (int, [dict(), ...]). The integer denotes the
+          number of objects existing in total. The list contains the retrieved
+          data structures representing the individual discussions.
+        """
+        resp = self._get("rooms.getDiscussions", url_params={
+            "roomId": rid,
+            "offset": offset,
+            "count": count
+        })
+
+        return resp["total"], resp["discussions"]

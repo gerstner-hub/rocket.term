@@ -244,6 +244,15 @@ class Controller:
 
         self.m_selected_threads.pop(room.getID(), None)
 
+    def getRoomInfo(self, rid):
+        try:
+            return self.m_rooms[rid]
+        except KeyError:
+            # probably a room we're not subscribed to. explicitly fetch the
+            # info, don't cache it at the moment, because this object won't
+            # support all operations due to the missing subscription info
+            return self.m_comm.getRoomInfo(rid)
+
     def getJoinedDirectChats(self, filter_hidden=True):
         ret = [room for room in self.m_rooms.values() if
                room.isDirectChat() and (room.isOpen() or not filter_hidden)]

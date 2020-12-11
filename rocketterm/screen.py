@@ -326,12 +326,16 @@ class Screen:
         max_width = self.m_room_box.getNumCols()
 
         for room in self.m_controller.getJoinedRooms():
+            if room.isPrivateChat() and room.isDiscussion():
+                name = room.getFriendlyName()
+            else:
+                name = room.getName()
             self._refreshRoomState(room)
             name_attr = self._getRoomColor(room)
             prefix_attr = self._getRoomPrefixColor(room)
             # truncate room names to avoid line breaks in list
             # items
-            truncated_name = room.getName()[:max_width - 2]
+            truncated_name = name[:max_width - 2]
             parts = []
             prefix = room.typePrefix()
             parts.append((prefix_attr, prefix))
@@ -433,10 +437,17 @@ class Screen:
                 self.m_logger.warning("Failed to determine user for direct chat {}".format(room.getName()))
                 text = "unknown user"
         elif room.supportsTopic():
-            text = self.m_current_room.getTopic()
+            text = ""
+            if room.isPrivateChat() and room.isDiscussion():
+                parent_id = room.getDiscussionParentRoomID()
+                parent = self.m_controller.getRoomInfo(parent_id)
+                text += "This discussion belongs to room {}{}\n".format(
+                    parent.typePrefix(), parent.getName()
+                )
+            text += self.m_current_room.getTopic()
             if room.supportsMembers():
                 user_count = self.m_controller.getRoomUserCount(room)
-                text = "{} ({} users)".format(text, user_count)
+                text += " ({} users)".format(user_count)
         else:
             # remove the heading
             return (None, None)
@@ -592,6 +603,14 @@ class Screen:
             uinfo = msg.getUserInfo()
             actor = uinfo.getFriendlyName()
             event = "{} has removed this message".format(actor)
+
+            return "[{}]".format(event)
+        elif _type == MessageType.DiscussionCreated:
+            uinfo = msg.getUserInfo()
+            actor = uinfo.getFriendlyName()
+            event = "{} has created discussion {}{}".format(
+                actor, rocketterm.types.PrivateChat.typePrefix(), raw_message
+            )
 
             return "[{}]".format(event)
         else:

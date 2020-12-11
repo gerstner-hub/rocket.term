@@ -107,6 +107,16 @@ class RoomBase(_RoomTypeMixin):
     def setSubscription(self, ss):
         self.m_subscription = ss
 
+    def getFriendlyName(self):
+        """Attempts to retrieve a friendly name for this room.
+
+        If there is no friendly name then this falls back to the unfriendly
+        name."""
+        try:
+            return self.m_data['fname']
+        except KeyError:
+            return self.getName()
+
     def getID(self):
         return self.m_data["_id"]
 
@@ -237,6 +247,17 @@ class PrivateChat(ChatRoom):
 
     def getTopic(self):
         return self.m_data.get("topic", "N/A")
+
+    def isDiscussion(self):
+        """Discussions are sub-rooms that are modelled as private chats.
+
+        Discussions have no nice names from getName(), use getFriendlyName()
+        instead.
+        """
+        return 'prid' in self.m_data
+
+    def getDiscussionParentRoomID(self):
+        return self.m_data.get('prid', None)
 
 
 ROOM_TYPES = (PrivateChat, DirectChat, ChatRoom)

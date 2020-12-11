@@ -459,3 +459,27 @@ class RocketComm:
         """
         resp = self.m_rt_session.createDirectChat(user.getUsername())
         return resp["result"]["rid"]
+
+    def getRoomInfo(self, rid):
+        """Retrieves a Room info object for the given room ID.
+
+        :return: A specialization of RoomBase, depending on the room type.
+        """
+        data = self.m_rest_session.getChannelInfo(rid)
+
+        # we don't have any subscription data here, this method is rather for
+        # rooms we're not subscribed to yet.
+        return rocketterm.utils.createRoom(data, None)
+
+    def getRoomDiscussions(self, room):
+        """Retrieves a list of PrivateGroup objects representing the
+        discussions in the given room."""
+
+        total, discussions = self.m_rest_session.getDiscussions(room.getID())
+
+        if total > len(discussions):
+            self.m_logger.warning("Didn't fetch full amount of discussions")
+
+        # here we don't have subscription information, because we're not
+        # necessarily subscribed to all the existing discussions
+        return [rocketterm.utils.createRoom(data, None) for data in discussions]
