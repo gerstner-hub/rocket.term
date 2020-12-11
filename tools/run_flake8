@@ -1,0 +1,26 @@
+#!/usr/bin/python3
+
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+pars = ["--max-line-length=120"]
+
+flake8 = shutil.which("flake8")
+
+if not flake8:
+	print("Couldn't find flake8 style checker.", file=sys.stderr)
+	sys.exit(1)
+
+repo_root = Path(__file__).parent.parent.absolute()
+package = repo_root / "rocketterm"
+
+for fn in os.listdir(package):
+	if not fn.endswith(".py"):
+		continue
+
+	pars.append(str(package / fn))
+
+subprocess.call([flake8] + pars)
