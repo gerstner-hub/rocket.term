@@ -176,9 +176,13 @@ class RocketTerm:
             return
 
         if self.m_comm.isLoggedIn():
-            print("Logging out...")
+            print("Logging out...", end='')
             sys.stdout.flush()
-            self.m_comm.logout()
+            try:
+                self.m_comm.logout()
+            except Exception:
+                print()
+                raise
             print_colored("success", color='green')
 
         self.m_comm.close()
