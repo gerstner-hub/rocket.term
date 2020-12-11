@@ -1087,13 +1087,9 @@ class Screen:
             new_msgs += self._resolveThreadMessages()
 
         row_nr = self._getMsgRowNr(msg_nr)
-        row = self.m_chat_box.body[row_nr]
-        self.m_logger.warning("scroll to message in row {}: {}".format(row_nr, row))
 
         self.m_chat_box.set_focus_valign("top")
         self.m_chat_box.set_focus(row_nr)
-
-        self.m_logger.warning("Scrolling to nr. {}: {}".format(row_nr, self.m_chat_box.body[row_nr]))
 
     def mainLoop(self):
         """The urwid main loop that processes UI and Controller events."""
