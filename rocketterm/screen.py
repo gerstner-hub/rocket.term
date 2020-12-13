@@ -182,7 +182,8 @@ class Screen:
         parts.append((
             'border',
             "Rocket.term {}@{} ({}, {}) ".format(
-                self.m_comm.getUsername(), self.m_comm.getServer(),
+                self.m_comm.getUsername(),
+                self.m_comm.getServerURI().getServerName(),
                 self.m_comm.getFullName(), self.m_comm.getEmail(),
             )
         ))

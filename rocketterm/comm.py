@@ -18,16 +18,16 @@ class RocketComm:
     other functions can be used.
     """
 
-    def __init__(self, server, login_data):
+    def __init__(self, server_uri, login_data):
         """:param login_data: An instance of PasswordLoginData or
         TokenLoginData to be used during login()."""
         self._reset()
         self.m_logger = logging.getLogger("comm")
-        self.m_server = server
+        self.m_server_uri = server_uri
         self.m_login_data = login_data
 
-        self.m_rt_session = rocketterm.realtime.RealtimeSession(server)
-        self.m_rest_session = rocketterm.rest.RestSession(server)
+        self.m_rt_session = rocketterm.realtime.RealtimeSession(server_uri)
+        self.m_rest_session = rocketterm.rest.RestSession(server_uri)
 
     def _reset(self):
         self.m_logged_in = False
@@ -148,9 +148,9 @@ class RocketComm:
         self.m_email = None
         self.m_full_name = None
 
-    def getServer(self):
+    def getServerURI(self):
         """Returns the configured server name."""
-        return self.m_server
+        return self.m_server_uri
 
     def getUsername(self):
         """Returns the username of the logged in user."""

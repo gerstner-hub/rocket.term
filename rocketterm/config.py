@@ -157,6 +157,20 @@ class RocketConfig:
                 self._raiseMissingItemError(conn_section, setting)
             self.m_config[setting] = value
 
+        for key, _default in (
+            ("rest_protocol", "https://"),
+            ("realtime_protocol", "wss://")
+        ):
+            val = connection.get(key, _default)
+            if not val.endswith("://"):
+                raise ConfigError(
+                    "Invalid protocol setting '{}={}'. Should end with '://' like 'https://' or 'wss://'".format(
+                        key, val
+                    )
+                )
+
+            self.m_config[key] = val
+
     def _parseDefaults(self):
         global_section = 'global'
 

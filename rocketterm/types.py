@@ -486,6 +486,24 @@ class TokenLoginData:
         return False
 
 
+class ServerURI:
+    """This type holds RC remote server URI components."""
+
+    def __init__(self, rest_scheme, rt_scheme, server_name):
+        self.m_rest_scheme = rest_scheme
+        self.m_rt_scheme = rt_scheme
+        self.m_server_name = server_name
+
+    def getREST_URI(self):
+        return "{}{}/api/v1".format(self.m_rest_scheme, self.m_server_name)
+
+    def getRealtimeURI(self):
+        return "{}{}/websocket".format(self.m_rt_scheme, self.m_server_name)
+
+    def getServerName(self):
+        return self.m_server_name
+
+
 class URLMeta:
     """Metadata for URLs that is sent by RC when URLs are included in chat
     messages."""

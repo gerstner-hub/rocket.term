@@ -32,12 +32,10 @@ class RestSession:
     # from logs
     _CENSORED = "<CENSORED>"
 
-    def __init__(self, server):
+    def __init__(self, server_uri):
         """:param str server: They DNS name and possible non-standard port of
         the RC server, without protocol scheme."""
-        self.m_server = "https://{}".format(server)
-        # the API sub-url that we need to prefix to all requests
-        self.m_api = "api/v1"
+        self.m_server_uri = server_uri
         self.m_logger = logging.getLogger("rest")
 
         self._reset()
@@ -53,7 +51,7 @@ class RestSession:
 
     def _buildURL(self, endpoint):
         """Returns a full https URL for the given API endpoint."""
-        return '/'.join((self.m_server, self.m_api, endpoint))
+        return '/'.join((self.m_server_uri.getREST_URI(), endpoint))
 
     def _getStatusString(self, http_status_code):
         """Returns a human readable string for the given numerical http status code."""

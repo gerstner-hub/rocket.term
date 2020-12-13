@@ -39,16 +39,17 @@ class RealtimeSession:
 
     _CENSORED = "<CENSORED>"
 
-    def __init__(self, server):
-        """:param str server: The DNS name and optional on-standard port of
+    def __init__(self, server_uri):
+        """:param str server: The DNS name and optional non-standard port of
         the remote server, without ws:// scheme prefix."""
-        self.m_server = "wss://{}/websocket".format(server)
+
+        self.m_server_uri = server_uri
         self.m_logger = logging.getLogger("rtsocket")
 
         self._reset()
 
         self.m_ws = websocket.WebSocketApp(
-            self.m_server,
+            server_uri.getRealtimeURI(),
             on_message=self._wsMessage,
             on_error=self._wsError,
             on_close=self._wsClose,

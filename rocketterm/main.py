@@ -124,12 +124,21 @@ class RocketTerm:
         else:
             raise Exception("Unexpected auth type encountered")
 
+    def getServerURI(self):
+        name = self.m_config["server"]
+        rest_scheme = self.m_config["rest_protocol"]
+        rt_scheme = self.m_config["realtime_protocol"]
+
+        return rocketterm.types.ServerURI(rest_scheme, rt_scheme, name)
+
     def setupComm(self):
 
         login_data = self.getLoginData()
-        server = self.m_config["server"]
-        self.m_comm = RocketComm(server, login_data)
-        print("Connecting to server {}...".format(server), end='')
+        server_uri = self.getServerURI()
+        self.m_comm = RocketComm(server_uri, login_data)
+        print("Connecting to server {}...".format(
+            server_uri.getServerName()), end=''
+        )
         sys.stdout.flush()
         try:
             self.m_comm.connect()
