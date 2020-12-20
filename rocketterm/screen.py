@@ -555,17 +555,17 @@ class Screen:
                         reaction, ', '.join(prefixed_users)
                     )
 
-            if msg.hasFile():
-                fi = msg.getFile()
-                attach_prefix = "[file attachment: {} ({})]".format(
-                    fi.getName(),
-                    fi.getMIMEType()
-                )
+                if msg.hasFile():
+                    fi = msg.getFile()
+                    attach_prefix = "[file attachment: {} ({})]".format(
+                        fi.getName(),
+                        fi.getMIMEType()
+                    )
 
-                if text:
-                    attach_prefix += ": "
+                    if text:
+                        attach_prefix += ": "
 
-                text = attach_prefix + (text if text else "")
+                    text = attach_prefix + (text if text else "")
 
             return text
         elif _type in (MessageType.UserLeft, MessageType.UserJoined):
