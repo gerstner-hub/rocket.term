@@ -30,6 +30,9 @@ class Command(Enum):
     DestroyRoom = "destroy"
     JoinChannel = "join"
     OpenDebugger = "debugger"
+    SetDefaultLogLevel = "setdefaultloglevel"
+    SetLogLevel = "setloglevel"
+    AddLogfile = "addlogfile"
 
 
 # the first format placeholder will receive the actual command name
@@ -54,11 +57,17 @@ USAGE = {
     Command.LeaveRoom: "/{} [ROOMSPEC]: leave the current or specified room permanently",
     Command.DestroyRoom: "/{} ROOMSPEC [--force]: destroy the given room permanently",
     Command.JoinChannel: "/{} #channel: joins the specified open chat room",
-    Command.OpenDebugger: "/{}: opens an interactive python debugger to inspect program state. This requires urxvt."
+    Command.OpenDebugger: "/{}: opens an interactive python debugger to inspect program state. This requires urxvt.",
+    Command.SetDefaultLogLevel: "/{} LOGLEVEL: adjusts the default Python loglevel.",
+    Command.SetLogLevel: "/{} LOGGER=LOGLEVEL: adjusts the logleven of the given Python logger.",
+    Command.AddLogfile: "/{} PATH: adds a logfile path to output Python logging to."
 }
 
 HIDDEN_COMMANDS = set([
-    Command.OpenDebugger
+    Command.OpenDebugger,
+    Command.SetDefaultLogLevel,
+    Command.AddLogfile,
+    Command.SetLogLevel
 ])
 
 
@@ -95,12 +104,13 @@ class Parser:
     # the prefix character to initiate a command
     CMD_INIT = '/'
 
-    def __init__(self, comm, controller, screen):
+    def __init__(self, global_objects):
 
-        self.m_comm = comm
-        self.m_controller = controller
+        self.m_global_objects = global_objects
+        self.m_comm = global_objects.comm
+        self.m_controller = global_objects.controller
         self.m_logger = logging.getLogger("parser")
-        self.m_screen = screen
+        self.m_screen = global_objects.screen
 
         self.m_special_completers = {
             Command.SetUserStatus: self._getUserStatusCompletionCandidates,
@@ -125,13 +135,17 @@ class Parser:
         # call a member function _handle<SubCommand>(args)
         camel = cmd.value[0].upper() + cmd.value[1:]
         memfunc = "_handle{}".format(camel)
-        handle_func = getattr(self, memfunc)
+        try:
+            handle_func = getattr(self, memfunc)
+        except AttributeError:
+            return "internal error: no such command handler: " + memfunc
+
         try:
             self.m_logger.debug("Running command {} ({})".format(
                 cmd.value, memfunc
             ))
             ret = handle_func(args)
-            self.m_logger.debug("{} command returned {}".format(cmd.value, ret))
+            self.m_logger.debug("{} command returned '{}'".format(cmd.value, ret))
             return ret
         except rocketterm.types.ActionNotAllowed:
             return "Server responded with 'action now allowed'"
@@ -761,3 +775,36 @@ class Parser:
         proc.wait()
 
         return "Returned from debugger with: " + err
+
+    def _handleSetdefaultloglevel(self, args):
+
+        if len(args) != 1:
+            return "invalid number of arguments. expected only LOGLEVEL."
+
+        level = args[0]
+
+        self.m_global_objects.log_manager.setDefaultLogLevel(level)
+
+        return "Default loglevel changed to " + level
+
+    def _handleSetloglevel(self, args):
+
+        if len(args) != 1:
+            return "invalid number of arguments. expected only LOGGER=LEVEL."
+
+        setting = args[0]
+
+        self.m_global_objects.log_manager.applyLogLevels(setting)
+
+        return "Applied loglevel setting " + setting
+
+    def _handleAddlogfile(self, args):
+
+        if len(args) != 1:
+            return "invalid number of arguments. expected only PATH."
+
+        path = args[0]
+
+        self.m_global_objects.log_manager.addLogfile(path)
+
+        return "Added logfile output in " + path

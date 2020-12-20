@@ -11,6 +11,16 @@ import rocketterm.config
 import rocketterm.screen
 import rocketterm.types
 import rocketterm.utils
+import rocketterm.logmanager
+
+
+class GlobalObjects:
+
+    config = None
+    controller = None
+    comm = None
+    screen = None
+    log_manager = None
 
 
 class RocketTerm:
@@ -19,6 +29,8 @@ class RocketTerm:
 
     def __init__(self):
         self.m_comm = None
+        self.m_global_objects = GlobalObjects()
+        self.m_global_objects.log_manager = rocketterm.logmanager.LogManager()
         self.setupArgparse()
 
     def setupArgparse(self):
@@ -54,51 +66,24 @@ class RocketTerm:
     def parseArgs(self):
         self.m_args = self.m_parser.parse_args()
 
+        log_manager = self.m_global_objects.log_manager
+
         if self.m_args.logfile:
-            logging.basicConfig(
-                filename=self.m_args.logfile,
-                level=self._getLogLevel(self.m_args.loglevel),
-                format='%(asctime)s %(name)10s %(levelname)10s: %(message)s'
-            )
+            log_manager.addLogfile(self.m_args.logfile)
+            log_manager.setDefaultLogLevel(self.m_args.loglevel)
         else:
-            # by default the logging module logs to the console,
-            # which is bad when we're using urwid. It's not all
-            # that easy to simply disable logging python-wide.
-            # Adding this NullHandler() seems to overwrite the
-            # default console handler, though.
-            logging.getLogger().addHandler(logging.NullHandler())
+            log_manager.disableConsoleLogging()
 
         loglevel_set = os.environ.get("LOGLEVEL_SET", None)
         if not loglevel_set:
             loglevel_set = self.m_args.loglevel_set
 
-        for setting in loglevel_set.split(','):
-            if not setting:
-                continue
-            parts = setting.split('=')
-            if len(parts) != 2:
-                printe("Bad LOGLEVEL_SET or --loglevel-set setting:", setting)
-                continue
-
-            logger, level = parts
-
-            try:
-                logging.getLogger(logger).setLevel(self._getLogLevel(level))
-            except Exception as e:
-                printe(
-                    "Bad logger or loglevel name in LOGLEVEL_SET or --loglevel-setting '{}':".format(setting), str(e)
-                )
+        try:
+            log_manager.applyLogLevels(loglevel_set)
+        except Exception as e:
+            printe("Bad LOGLEVEL_SET or --loglevel-set setting(s):\n{}".format(str(e)))
 
         self.m_logger = logging.getLogger("main")
-
-    @classmethod
-    def _getLogLevel(self, string):
-        """Translates the loglevel string from the command line into
-        the numerical loglevel required by the logging module."""
-        try:
-            return getattr(logging, string.upper())
-        except AttributeError:
-            raise Exception("Invalid loglevel: '{}'".format(string))
 
     def getLoginData(self):
         username = self.m_config["username"]
@@ -138,6 +123,7 @@ class RocketTerm:
         login_data = self.getLoginData()
         server_uri = self.getServerURI()
         self.m_comm = RocketComm(server_uri, login_data)
+        self.m_global_objects.comm = self.m_comm
         print("Connecting to server {}...".format(
             server_uri.getServerName()), end=''
         )
@@ -151,7 +137,7 @@ class RocketTerm:
 
     def setupScreen(self):
 
-        self.m_screen = rocketterm.screen.Screen(self.m_config, self.m_comm)
+        self.m_global_objects.screen = rocketterm.screen.Screen(self.m_global_objects)
 
     def login(self):
         print("Logging into {} as {}...".format(
@@ -203,12 +189,13 @@ class RocketTerm:
         self.parseArgs()
         rconfig = rocketterm.config.RocketConfig(self.m_args.config)
         self.m_config = rconfig.getConfig()
+        self.m_global_objects.config = self.m_config
 
         self.setupComm()
 
         try:
             if self.login():
                 self.setupScreen()
-                self.m_screen.mainLoop()
+                self.m_global_objects.screen.mainLoop()
         finally:
             self.teardown()
