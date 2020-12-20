@@ -29,6 +29,7 @@ class Command(Enum):
     LeaveRoom = "leave"
     DestroyRoom = "destroy"
     JoinChannel = "join"
+    OpenDebugger = "debugger"
 
 
 # the first format placeholder will receive the actual command name
@@ -53,7 +54,12 @@ USAGE = {
     Command.LeaveRoom: "/{} [ROOMSPEC]: leave the current or specified room permanently",
     Command.DestroyRoom: "/{} ROOMSPEC [--force]: destroy the given room permanently",
     Command.JoinChannel: "/{} #channel: joins the specified open chat room",
+    Command.OpenDebugger: "/{}: opens an interactive python debugger to inspect program state. This requires urxvt."
 }
+
+HIDDEN_COMMANDS = set([
+    Command.OpenDebugger
+])
 
 
 class ParseError(Exception):
@@ -265,7 +271,7 @@ class Parser:
             raise ParseError("unknown command '{}'".format(command))
 
     def _getCommandCompletionCandidates(self, prefix):
-        possible = [c.value for c in Command.__members__.values()]
+        possible = [c.value for c in Command.__members__.values() if c not in HIDDEN_COMMANDS]
         return [cmd for cmd in possible if cmd.startswith(prefix)]
 
     def _getUserStatusCompletionCandidates(self, command, args):
@@ -531,7 +537,7 @@ class Parser:
         )
 
     def _handleCommands(self, args):
-        return ' '.join([c.value for c in Command])
+        return ' '.join([c.value for c in Command if c not in HIDDEN_COMMANDS])
 
     def _handleSend(self, args):
         if len(args) != 1:
@@ -709,3 +715,49 @@ class Parser:
         self.m_comm.eraseRoom(room)
 
         return "Destroyed room " + room.getLabel()
+
+    def _handleDebugger(self, args):
+        # we can either run the debugger in the same terminal, which will mess
+        # up the screen an we won't have echo (didn't find a way to enable it
+        # again from within urwid, ncurses claims it wasn't initialized yet)
+        # ... or we use a PTY and connect the pdb to it. This also has some
+        # downsides like no tab-completion etc. but as a last rest it works
+        # okay.
+        import os
+        import bdb
+        import pdb
+        import pty
+        import subprocess
+
+        try:
+            master, slave = pty.openpty()
+            proc = subprocess.Popen(
+                    ["urxvt", "-pty-fd", str(master)],
+                    pass_fds=[master],
+                    stderr=subprocess.DEVNULL
+            )
+
+            pty_pdb = pdb.Pdb(
+                    stdin=os.fdopen(slave, 'r'),
+                    stdout=os.fdopen(slave, 'w')
+            )
+            pty_pdb.set_trace()
+            # this pass instruction is important for the BdbQuit except clause
+            # below to work. It seems pdb is skipping over one instruction
+            # after set_trace() for some reason, causing the exception to be
+            # raised in the outer context if we don't add this pass
+            # instruction
+            pass
+        except bdb.BdbQuit:
+            err = "success"
+        except FileNotFoundError:
+            return "error: the 'urxvt' terminal emulator was not found. It is required for debugging."
+        except Exception as e:
+            err = str(e)
+
+        os.close(master)
+        os.close(slave)
+        proc.terminate()
+        proc.wait()
+
+        return "Returned from debugger with: " + err
