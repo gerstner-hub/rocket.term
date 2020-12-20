@@ -46,6 +46,20 @@ class HTTPError(Exception):
         return self.m_code == 403
 
 
+class RESTError(HTTPError):
+
+    def __init__(self, code, details, *args, **kwargs):
+
+        super().__init__(code, *args, **kwargs)
+        self.m_details = details
+
+    def getErrorType(self):
+        return self.m_details.get("errorType", None)
+
+    def getErrorText(self):
+        return self.m_details.get("error", None)
+
+
 class _RoomTypeMixin:
 
     def getType(self):
@@ -106,6 +120,9 @@ class RoomBase(_RoomTypeMixin):
 
     def setSubscription(self, ss):
         self.m_subscription = ss
+
+    def getLabel(self):
+        return self.typePrefix() + self.getName()
 
     def getFriendlyName(self):
         """Attempts to retrieve a friendly name for this room.
@@ -247,6 +264,12 @@ class PrivateChat(ChatRoom):
 
     def getTopic(self):
         return self.m_data.get("topic", "N/A")
+
+    def getLabel(self):
+        if not self.isDiscussion():
+            return ChatRoom.getLabel(self)
+
+        return self.typePrefix() + self.getFriendlyName()
 
     def isDiscussion(self):
         """Discussions are sub-rooms that are modelled as private chats.

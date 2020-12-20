@@ -62,6 +62,9 @@ class Controller:
         # members of the respective room. This mapping is only filled
         # in a lazy fashion as we encounter users
         self.m_room_members = dict()
+        # a mapping of room IDs to ChatRoom objects for all known channels on
+        # the server
+        self.m_channels = {}
         # a mapping of user ID to BasicUserInfo objects. This mapping is
         # only filled in a lazy fashion as we encounter users
         self.m_basic_user_infos = dict()
@@ -244,7 +247,8 @@ class Controller:
 
         self.m_selected_threads.pop(room.getID(), None)
 
-    def getRoomInfo(self, rid):
+    def getRoomInfoByID(self, rid):
+        """Returns a specialization of RoomBase for the given room ID."""
         try:
             return self.m_rooms[rid]
         except KeyError:
@@ -252,6 +256,42 @@ class Controller:
             # info, don't cache it at the moment, because this object won't
             # support all operations due to the missing subscription info
             return self.m_comm.getRoomInfo(rid)
+
+    def getRoomInfoByLabel(self, label):
+        """Returns a specialization of RoomBase for the given room label.
+
+        :param str label: The room name with leading prefix like '#', '$',
+            etc. It can be the short or the friendly room name.
+        """
+
+        for room in self.m_rooms.values():
+            if room.typePrefix() != label[0]:
+                continue
+
+            if room.getName() == label[1:] or room.getFriendlyName() == label[1:]:
+                return room
+
+        return self.m_comm.getRoomInfo(room_name=label[1:])
+
+    def getChannels(self):
+        """Returns a dictionary of all rooms known on the server."""
+
+        if self.m_channels:
+            # TODO: we should implement a refresh logic here, e.g. when the
+            # last load is older then a minute or something, then request a
+            # delta from the server
+            pass
+        else:
+
+            def channelLoadProgress(so_far, total):
+                self.m_callbacks.getChannelsInProgress(so_far, total)
+
+            channels = self.m_comm.getChannelList(progress_cb=channelLoadProgress)
+
+            for channel in channels:
+                self.m_channels[channel.getID()] = channel
+
+        return self.m_channels
 
     def getJoinedDirectChats(self, filter_hidden=True):
         ret = [room for room in self.m_rooms.values() if
@@ -550,6 +590,13 @@ class Controller:
             self.m_user_status[our_id] = new_status
             self.m_callbacks.ownUserStatusChanged(new_status)
 
+    def joinChannel(self, room):
+        """Joins the given chat room and selects it once the subscription is
+        sent back from the server."""
+
+        self.m_comm.joinChannel(room)
+        self.m_awaited_room = room
+
     def _getRoomToOperateOn(self, room):
         """Helper function to implement the often used logic to operate either
         on the provided room parameter or the currently selected room."""
@@ -738,10 +785,8 @@ class Controller:
         if new_data.isOpen():
             # room is visible now
             self.m_callbacks.roomOpened(room)
-            if self.m_awaited_room and room.getID() == self.m_awaited_room.getID():
-                self.m_awaited_room = None
-                self.selectRoom(room)
-            elif not self.m_selected_room:
+            self._selectRoomIfAwaited(room)
+            if not self.m_selected_room:
                 self.selectRoom(room)
         else:
             # room is hidden now
@@ -751,6 +796,16 @@ class Controller:
                 if not self.selectAnyRoom():
                     self.m_selected_room = None
                     self.m_callbacks.newRoomSelected()
+
+    def _selectRoomIfAwaited(self, room):
+        if not self.m_awaited_room:
+            return False
+        elif room.getID() != self.m_awaited_room.getID():
+            return False
+
+        self.m_awaited_room = None
+        self.selectRoom(room)
+        return True
 
     def _subscriptionAdded(self, data):
         # a new room appeared
@@ -768,6 +823,7 @@ class Controller:
             return
 
         self._addRoom(room)
+        self._selectRoomIfAwaited(room)
         self.m_callbacks.roomAdded(room)
 
     def _subscriptionRemoved(self, data):

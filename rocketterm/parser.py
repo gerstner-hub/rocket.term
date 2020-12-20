@@ -26,6 +26,8 @@ class Command(Enum):
     ChatWith = "chatwith"
     JumpToMessage = "jump"
     ListDiscussions = "discussions"
+    LeaveRoom = "leave"
+    JoinChannel = "join"
 
 
 # the first format placeholder will receive the actual command name
@@ -46,7 +48,9 @@ USAGE = {
     Command.LeaveThread: "/{}: leaves a previously selected thread.",
     Command.ChatWith: "/{} @USERSPEC: create and select a new direct chat with the given user.",
     Command.JumpToMessage: "/{} #MSGSPEC: jumps/scrolls to the select message number in the current room.",
-    Command.ListDiscussions: "/{}: lists available discussions in this room"
+    Command.ListDiscussions: "/{}: lists available discussions in this room",
+    Command.LeaveRoom: "/{} [ROOMSPEC]: leave the current or specified room permanently",
+    Command.JoinChannel: "/{} #channel: joins the specified open chat room",
 }
 
 
@@ -92,7 +96,8 @@ class Parser:
 
         self.m_special_completers = {
             Command.SetUserStatus: self._getUserStatusCompletionCandidates,
-            Command.Help: self._getHelpCompletionCandidates
+            Command.Help: self._getHelpCompletionCandidates,
+            Command.JoinChannel: self._getChannelCompletionCandidates
         }
 
     def commandEntered(self, line):
@@ -114,7 +119,12 @@ class Parser:
         memfunc = "_handle{}".format(camel)
         handle_func = getattr(self, memfunc)
         try:
-            return handle_func(args)
+            self.m_logger.debug("Running command {} ({})".format(
+                cmd.value, memfunc
+            ))
+            ret = handle_func(args)
+            self.m_logger.debug("{} command returned {}".format(cmd.value, ret))
+            return ret
         except rocketterm.types.ActionNotAllowed:
             return "Server responded with 'action now allowed'"
         except rocketterm.types.MethodCallError as e:
@@ -123,7 +133,7 @@ class Parser:
             reason = str(e)
             if not reason:
                 reason = str(type(e))
-            return "Command failed with: {}".format(reason)
+            return "{} command failed with: {}".format(cmd.value, reason)
 
     def completeCommand(self, line):
         """Attempts to perform command completion on the given input
@@ -271,6 +281,26 @@ class Parser:
 
         return self._getCommandCompletionCandidates(prefix)
 
+    def _getChannelCompletionCandidates(self, command, args):
+        if not args or len(args) != 1:
+            return []
+
+        prefix = args[0]
+
+        if not prefix.startswith(rocketterm.types.ChatRoom.typePrefix()):
+            return []
+
+        ret = []
+
+        for channel in self.m_controller.getChannels().values():
+
+            label = channel.getLabel()
+
+            if label.startswith(prefix):
+                ret.append(label)
+
+        return ret
+
     def _getParameterCompletionCandidates(self, command, args):
         """Performs generic parameter completion for rooms, users etc."""
         to_complete = args[-1]
@@ -284,7 +314,10 @@ class Parser:
             # nothing we know how to complete
             return []
 
-        expect_room = command in (Command.HideRoom, Command.OpenRoom, Command.SendMessage, Command.SelectRoom)
+        expect_room = command in (
+                Command.HideRoom, Command.OpenRoom, Command.SendMessage,
+                Command.SelectRoom, Command.LeaveRoom
+        )
         expect_user = command in (Command.SendMessage, Command.WhoIs, Command.GetUserStatus, Command.ChatWith)
         room_filters = []
 
@@ -369,7 +402,7 @@ class Parser:
 
         return room
 
-    def _getRoomFromArg(self, label):
+    def _getRoomFromArg(self, label, consider_unsubscribed=False):
         rooms = self.m_controller.getJoinedRooms(filter_hidden=False)
         prefix = label[0]
         name = label[1:]
@@ -382,16 +415,24 @@ class Parser:
 
             return room
 
+        if consider_unsubscribed:
+            return self.m_controller.getRoomInfoByLabel(label)
+
         raise ParseError("No such room {}".format(label))
 
-    def _handleHide(self, args):
+    def _getOptionalRoomArg(self, args):
         if args:
-            room_label = self._checkRoomArg(args)
-            room = self._getRoomFromArg(room_label)
+            label = self._checkRoomArg(args)
+            room = self._getRoomFromArg(label)
         else:
             # hide the current room
             room = self.m_controller.getSelectedRoom()
-            room_label = room.typePrefix() + room.getName()
+            label = room.typePrefix() + room.getName()
+
+        return room, label
+
+    def _handleHide(self, args):
+        room, room_label = self._getOptionalRoomArg(args)
 
         if not room.isOpen():
             return "Room {} is already hidden".format(room_label)
@@ -622,3 +663,21 @@ class Parser:
             len(discussions),
             ', '.join([d.typePrefix() + d.getFriendlyName() for d in discussions])
         )
+
+    def _handleLeave(self, args):
+        room, label = self._getOptionalRoomArg(args)
+
+        self.m_comm.leaveRoom(room)
+
+        return "Left room " + label
+
+    def _handleJoin(self, args):
+        label = self._checkRoomArg(args)
+        room = self._getRoomFromArg(label, consider_unsubscribed=True)
+
+        if not room.isChatRoom():
+            return "can only join open chat rooms, not " + room.typeLabel()
+
+        self.m_controller.joinChannel(room)
+
+        return "Joined room " + room.getLabel()

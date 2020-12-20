@@ -469,16 +469,64 @@ class RocketComm:
         resp = self.m_rt_session.createDirectChat(user.getUsername())
         return resp["result"]["rid"]
 
-    def getRoomInfo(self, rid):
+    def getRoomInfo(self, rid=None, room_name=None):
         """Retrieves a Room info object for the given room ID.
 
         :return: A specialization of RoomBase, depending on the room type.
         """
-        data = self.m_rest_session.getChannelInfo(rid)
+
+        if rid and room_name:
+            raise Exception("only one parameter allowed")
+        elif rid is None and room_name is None:
+            raise Exception("missing one required parameter")
+
+        try:
+            data = self.m_rest_session.getRoomInfo(rid, room_name)
+        except rocketterm.types.RESTError as e:
+            raise Exception("Getting room info for {} failed: {}".format(
+                rid if rid else room_name,
+                e.getErrorText()
+            ))
 
         # we don't have any subscription data here, this method is rather for
         # rooms we're not subscribed to yet.
         return rocketterm.utils.createRoom(data, None)
+
+    def getChannelList(self, progress_cb=None):
+        """Retrieves the full list of open chat rooms on the server which can
+        take a longer time.
+        """
+
+        offset = 0
+        ret = []
+
+        while True:
+            try:
+                resp = self.m_rest_session.getChannelList(offset=offset)
+            except rocketterm.types.HTTPError as e:
+                if e.isForbidden():
+                    raise rocketterm.types.ActionNotAllowed(
+                            "you account is not allowed to list channels on the server")
+                raise
+
+            channels = resp["channels"]
+
+            for channel in channels:
+                # here again there's no subscription data available, maybe we
+                # should find another approach that models subscribed rooms
+                # differently than just "rooms"
+                ret.append(rocketterm.utils.createRoom(channel, None))
+
+            offset += len(channels)
+            total_channels = resp["total"]
+
+            if progress_cb:
+                progress_cb(offset, total_channels)
+
+            if offset >= total_channels:
+                break
+
+        return ret
 
     def getRoomDiscussions(self, room):
         """Retrieves a list of PrivateGroup objects representing the
@@ -492,3 +540,31 @@ class RocketComm:
         # here we don't have subscription information, because we're not
         # necessarily subscribed to all the existing discussions
         return [rocketterm.utils.createRoom(data, None) for data in discussions]
+
+    def leaveRoom(self, room):
+        """Removes the logged in users subscription from the given room."""
+
+        try:
+            if room.isChatRoom():
+                self.m_rest_session.leaveChannel(room.getID())
+            elif room.isPrivateChat():
+                self.m_rest_session.leaveGroup(room.getID())
+            else:
+                raise Exception("You cannot leave this room type, you can only hide it.")
+        except rocketterm.types.RESTError as e:
+            raise Exception("Leaving {} failed: {}".format(
+                room.getLabel(),
+                e.getErrorText()
+            ))
+
+    def joinChannel(self, room):
+        """Let the logged in user join the given channel and add it to her
+        subscriptions."""
+
+        try:
+            self.m_rest_session.joinChannel(room.getID())
+        except rocketterm.types.RESTError as e:
+            raise Exception("Joining {} failed: {}".format(
+                room.getLabel(),
+                e.getErrorText()
+            ))

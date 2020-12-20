@@ -64,8 +64,9 @@ class RestSession:
         if resp.status_code == expected:
             return
 
-        raise rocketterm.types.HTTPError(
+        raise rocketterm.types.RESTError(
             resp.status_code,
+            resp.json(),
             "Bad http status {} ({})".format(
                 str(resp.status_code), self._getStatusString(resp.status_code))
         )
@@ -243,7 +244,8 @@ class RestSession:
         return resp["groups"]
 
     def getChannelInfo(self, rid):
-        """Returns the information about a specific room ID."""
+        """Returns the information about a specific chat room ID (only for
+        ChatRoom types)."""
         resp = self._get("channels.info", url_params={"roomId": rid})
         return resp["channel"]
 
@@ -331,3 +333,57 @@ class RestSession:
         })
 
         return resp["total"], resp["discussions"]
+
+    def leaveChannel(self, rid):
+        """Leaves the channel with the given room ID that the user is
+        currently subscribed to.
+
+        This only works for open chat rooms, not for groups. See leaveGroup()
+        for that.
+        """
+
+        self._post("channels.leave", data={"roomId": rid})
+
+    def joinChannel(self, rid, join_code=""):
+        """Joins the given open chat room and adds it to the current user's
+        subscriptions."""
+
+        self._post("channels.join", data={"roomId": rid, "joinCode": join_code})
+
+    def leaveGroup(self, rid):
+        """Leaves the group with the given room ID that the user is currently
+        subscribed to.
+
+        This only works for private groups, not for open chat rooms. See
+        leaveChannel() for that.
+        """
+
+        self._post("groups.leave", data={"roomId": rid})
+
+    def getRoomInfo(self, rid=None, room_name=None):
+        """Returns a specialization of RoomBase for the given room ID or room
+        name.
+
+        Only one of the parameters is allowed and required to be set.
+        """
+
+        params = {}
+        if rid:
+            params["roomId"] = rid
+        elif room_name:
+            params["roomName"] = room_name
+
+        resp = self._get("rooms.info", url_params=params)
+
+        return resp["room"]
+
+    def getChannelList(self, count=50, offset=0):
+        """Returns a list of all open chat rooms on the server.
+        """
+
+        resp = self._get(
+            "channels.list",
+            url_params={"count": count, "offset": offset}
+        )
+
+        return resp

@@ -31,6 +31,8 @@ Among other things:
   status.
 - Reading and setting room topics.
 - Creating new direct chats with other users.
+- Joining or leaving open chat rooms
+- Leaving private groups (joining them is not yet implemented)
 
 Currently it focuses on the basic chat features. More features are in the
 pipeline.

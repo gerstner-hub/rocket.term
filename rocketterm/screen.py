@@ -450,7 +450,7 @@ class Screen:
             text = ""
             if room.isPrivateChat() and room.isDiscussion():
                 parent_id = room.getDiscussionParentRoomID()
-                parent = self.m_controller.getRoomInfo(parent_id)
+                parent = self.m_controller.getRoomInfoByID(parent_id)
                 text += "This discussion belongs to room {}{}\n".format(
                     parent.typePrefix(), parent.getName()
                 )
@@ -1126,12 +1126,11 @@ class Screen:
         if not self.m_loop_running:
             return
 
-        rlabel = room.typePrefix() + room.getName()
         total_msgs = self.m_controller.getRoomMsgCount(room)
         cur_msgs = len(self.m_controller.getCachedRoomMessages(room))
 
         feedback = "Loading more chat history from {} ({}/{})".format(
-                rlabel, cur_msgs, "?" if total_msgs == -1 else total_msgs
+                room.getLabel(), cur_msgs, "?" if total_msgs == -1 else total_msgs
         )
 
         self._setStatusMessage(feedback)
@@ -1153,6 +1152,20 @@ class Screen:
             return
         feedback = "Loading user list from server ({}/{})".format(
             so_far, total
+        )
+        self._setStatusMessage(feedback)
+        self.m_loop.draw_screen()
+
+    def getChannelsInProgress(self, so_far, total):
+        """Called by the controller when time intensive room list loads are in
+        progress.
+        """
+
+        if not self.m_loop_running:
+            return
+
+        feedback = "Loading channel list from server ({}/{})".format(
+                so_far, "?" if total == -1 else total
         )
         self._setStatusMessage(feedback)
         self.m_loop.draw_screen()
