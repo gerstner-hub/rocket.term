@@ -557,6 +557,16 @@ class RocketComm:
                 e.getErrorText()
             ))
 
+    def eraseRoom(self, room):
+        """Deletes the given room object (open chat room or private group)
+        permanently.
+
+        Direct chats cannot be erased, they can only be hidden. You also need
+        proper permissions to perform this operation.
+        """
+
+        self.m_rt_session.eraseRoom(room.getID())
+
     def joinChannel(self, room):
         """Let the logged in user join the given channel and add it to her
         subscriptions."""

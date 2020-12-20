@@ -610,6 +610,18 @@ class RealtimeSession:
 
         return resp
 
+    def eraseRoom(self, rid):
+        """Deletes a public channel or private group permanently.
+
+        This requires proper user permissions to do so.
+        """
+
+        resp = self.methodCall("eraseRoom", [rid])
+
+        self._checkErrorReply(resp)
+
+        return resp
+
     def setUserPresence(self, status):
         """Sets the user presence status of the currently logged in
         user.

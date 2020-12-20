@@ -27,6 +27,7 @@ class Command(Enum):
     JumpToMessage = "jump"
     ListDiscussions = "discussions"
     LeaveRoom = "leave"
+    DestroyRoom = "destroy"
     JoinChannel = "join"
 
 
@@ -50,6 +51,7 @@ USAGE = {
     Command.JumpToMessage: "/{} #MSGSPEC: jumps/scrolls to the select message number in the current room.",
     Command.ListDiscussions: "/{}: lists available discussions in this room",
     Command.LeaveRoom: "/{} [ROOMSPEC]: leave the current or specified room permanently",
+    Command.DestroyRoom: "/{} ROOMSPEC [--force]: destroy the given room permanently",
     Command.JoinChannel: "/{} #channel: joins the specified open chat room",
 }
 
@@ -323,7 +325,7 @@ class Parser:
 
         expect_room = command in (
                 Command.HideRoom, Command.OpenRoom, Command.SendMessage,
-                Command.SelectRoom, Command.LeaveRoom
+                Command.SelectRoom, Command.LeaveRoom, Command.DestroyRoom
         )
         expect_user = command in (Command.SendMessage, Command.WhoIs, Command.GetUserStatus, Command.ChatWith)
         room_filters = []
@@ -684,3 +686,26 @@ class Parser:
         self.m_controller.joinChannel(room)
 
         return "Joined room " + room.getLabel()
+
+    def _handleDestroy(self, args):
+        if len(args) == 2 and args[-1].lower() == "--force":
+            force = True
+            args.pop()
+        else:
+            force = False
+
+        label = self._checkRoomArg(args)
+        room = self._getRoomFromArg(label)
+
+        if room.isDirectChat():
+            return "direct chats cannot be erased"
+
+        user_count = self.m_controller.getRoomUserCount(room)
+
+        if user_count > 1 and not force:
+            return "The room {} still has {} users in it. If you really want " \
+                   "to destroy it add the --force parameter.".format(room.getLabel(), user_count)
+
+        self.m_comm.eraseRoom(room)
+
+        return "Destroyed room " + room.getLabel()
