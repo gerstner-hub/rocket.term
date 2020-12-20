@@ -161,7 +161,12 @@ class RealtimeSession:
                 self.m_pending_replies.append(data)
                 self.m_condition.notify()
         except Exception as e:
-            self.m_logger.error("Failed to process incoming message: {}.\nFailed message was: {}".format(str(e), data))
+            from rocketterm.utils import getExceptionContext
+            self.m_logger.error(
+                "Failed to process incoming message: {}.\nFailed message was: {}. Exception: {}".format(
+                    str(e), data, getExceptionContext(e)
+                )
+            )
 
     def _getNewReqID(self):
         """Returns the next request ID to use for method calls."""
@@ -204,7 +209,7 @@ class RealtimeSession:
         result = data.get("result", {})
 
         # censor any token/login data during logging
-        if 'token' in result:
+        if type(result) == dict and 'token' in result:
             data = copy.deepcopy(data)
             data["result"]["token"] = self._CENSORED
 

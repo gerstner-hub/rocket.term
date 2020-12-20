@@ -61,3 +61,12 @@ def createUserPresenceFromStatusIndicator(indicator):
         return mapping[indicator]
     except KeyError:
         raise Exception("Invalid status indicator value: {}".format(indicator))
+
+
+def getExceptionContext(ex):
+    import sys
+    import traceback
+
+    _, _, tb = sys.exc_info()
+    fn, ln, _, _ = traceback.extract_tb(tb)[-1]
+    return "{}:{}: {}".format(fn, ln, str(ex))
