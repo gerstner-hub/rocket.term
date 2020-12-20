@@ -39,7 +39,9 @@ class RocketTerm:
         self.m_parser.add_argument(
             "--loglevel-set",
             type=str,
-            help="Sets per-logger loglevels. Expects a comma separated string like 'main=debug,screen=warning'. Can also be set through the environment variable LOGLEVEL_SET which takes precedence over this command line switch.",
+            help="Sets per-logger loglevels. Expects a comma separated string like 'main=debug,screen=warning'. "
+                 "Can also be set through the environment variable LOGLEVEL_SET which takes precedence over this "
+                 "command line switch.",
             default=""
         )
         self.m_parser.add_argument(

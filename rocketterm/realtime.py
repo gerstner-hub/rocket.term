@@ -534,7 +534,7 @@ class RealtimeSession:
         """Returns a list of Subscriptions that the logged in user
         has.
 
-        :param int changes_sice_ts: Option change data parameter. See
+        :param int changes_sice_ts: Optional change data parameter. See
                                     getJoinedRooms().
 
         :return list: Sequence of dictionaries that describe the subscriptions.

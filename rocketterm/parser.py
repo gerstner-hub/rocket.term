@@ -38,7 +38,8 @@ USAGE = {
     Command.ListCommands: "/{}: lists the names of all supported commands",
     Command.Help: "/{} COMMAND: prints a short usage of the given command",
     Command.WhoIs: "/{} @USERSPEC: prints detailed user information",
-    Command.SetUserStatus: "/{} STATUS [MESSAGE]: sets the current user status (away,online,etc.) and an optional status message.",
+    Command.SetUserStatus:
+        "/{} STATUS [MESSAGE]: sets the current user status (away,online,etc.) and an optional status message.",
     Command.GetUserStatus: "/{} @USERSPEC: gets the given user's current status and status text",
     Command.SetRoomTopic: "/{} TOPIC: Changes the topic of the current room",
     Command.SelectThread: "/{} #MSGSPEC: selects a thread to participate in by default. Leave again with /nothread.",
@@ -401,7 +402,6 @@ class Parser:
     def _handleOpen(self, args):
         room_label = self._checkRoomArg(args)
         room = self._getRoomFromArg(room_label)
-
         if room.isOpen():
             return "Room {} is already open".format(room_label)
 
