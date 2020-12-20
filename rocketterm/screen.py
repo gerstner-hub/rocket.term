@@ -910,8 +910,8 @@ class Screen:
         curpos = self.m_chat_box.focus_position
 
         self.m_logger.debug(
-            "scroll request direction = {} curpos = {}".format(
-                direction, curpos
+            "scroll request direction = {} curpos = {} (#{})".format(
+                direction, curpos, self._getFocusedMessageNr()
             )
         )
 
@@ -921,15 +921,13 @@ class Screen:
 
         elif direction == ScrollDirection.OLDER:
             if curpos == 0:
+                # remember at which message we are, because when we load
+                # additional chat history then the focus positions in the chat
+                # box body somehow are not reliable any more
+                focused_msg = self._getFocusedMessageNr()
                 new_msgs = self._loadMoreChatHistory()
                 new_msgs += self._resolveThreadMessages()
-                # since we prepended new messages, adjust our
-                # current focus to make the widget's scrolling
-                # logic work the way we want
-                # NOTE: this is only an estimate, since date
-                # bars might be around. We'd need to take that
-                # also into account to make it precise.
-                self.m_chat_box.set_focus(new_msgs)
+                self.scrollToMessage(focused_msg)
             self.m_chat_box.scrollUp(small_increments)
             return
         elif direction == ScrollDirection.NEWEST:
@@ -962,6 +960,27 @@ class Screen:
             self.m_cmd_input.addPrompt("[#{}]".format(nrs[0]))
         else:
             self.m_cmd_input.resetPrompt()
+
+    def _getFocusedMessageNr(self):
+        """Returns the msg nr# of the message currently in chat box focus.
+
+        If no matching message was found then None is returned.
+        """
+        boxpos = self.m_chat_box.focus_position
+
+        for pos in range(boxpos, len(self.m_chat_box.body)):
+            row = self.m_chat_box.body[pos]
+            text = row.text
+            if not text.startswith('#'):
+                continue
+            parts = text.lstrip('#').split(None, 1)
+            if len(parts) != 2:
+                continue
+            msgnr = parts[0]
+            if not msgnr.isnumeric():
+                continue
+
+            return int(msgnr)
 
     def _getOldestLoadedMsgNr(self):
         return self.m_controller.getRoomMsgCount() - self.m_num_chat_msgs + 1
