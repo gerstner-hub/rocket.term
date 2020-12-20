@@ -328,19 +328,15 @@ class Screen:
         max_width = self.m_room_box.getNumCols()
 
         for room in self.m_controller.getJoinedRooms():
-            if room.isPrivateChat() and room.isDiscussion():
-                name = room.getFriendlyName()
-            else:
-                name = room.getName()
+            name = room.getLabel()
             self._refreshRoomState(room)
             name_attr = self._getRoomColor(room)
             prefix_attr = self._getRoomPrefixColor(room)
             # truncate room names to avoid line breaks in list
             # items
-            truncated_name = name[:max_width - 2]
+            truncated_name = name[1:max_width - 2]
             parts = []
-            prefix = room.typePrefix()
-            parts.append((prefix_attr, prefix))
+            parts.append((prefix_attr, name[0]))
             name = (name_attr, truncated_name)
             parts.append(name)
             self.m_room_box.body.append(urwid.Text(parts))

@@ -360,7 +360,7 @@ class Parser:
         rooms = self.m_controller.getJoinedRooms(filter_hidden=False)
         for _filter in room_filters:
             rooms = filter(_filter, rooms)
-        room_names = [room.typePrefix() + room.getName() for room in rooms]
+        room_names = [room.getLabel() for room in rooms]
         candidates = [room for room in room_names if room.startswith(base)]
 
         return candidates
@@ -404,13 +404,9 @@ class Parser:
 
     def _getRoomFromArg(self, label, consider_unsubscribed=False):
         rooms = self.m_controller.getJoinedRooms(filter_hidden=False)
-        prefix = label[0]
-        name = label[1:]
 
         for room in rooms:
-            if room.typePrefix() != prefix:
-                continue
-            elif room.getName() != name:
+            if room.getLabel() != label:
                 continue
 
             return room
