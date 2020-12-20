@@ -192,15 +192,16 @@ class Parser:
 
         # the base word (whitespace separated) that we're trying to
         # tab-complete
-        base = shlex.split(line)[-1]
+        parts = shlex.split(line)
+        word = parts[-1]
         # the characters that we can try to add to the base word, if
         # it they shared a common prefix with all the candidate words
-        left_chars = candidates[0][len(base):]
+        left_chars = candidates[0][len(word):]
         # the actual characters that we're appending to line
         to_add = ""
 
         while left_chars:
-            tester = base + to_add + left_chars[0]
+            tester = word + to_add + left_chars[0]
 
             # checks whether this prefix is still shared with all
             # the candidates
@@ -212,7 +213,13 @@ class Parser:
             else:
                 break
 
-        ret = line + to_add
+        new_word = word + to_add
+
+        # the new word contains whitespace, so add quotes
+        if len(new_word.split()) != 1:
+            new_word = '"{}"'.format(new_word)
+
+        ret = ' '.join(parts[:-1] + [new_word])
 
         if len(candidates) == 1 and not ret.endswith(' '):
             # if this is the only possible completion also add
