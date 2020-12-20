@@ -313,8 +313,6 @@ class Parser:
     def _getUserCompletionCandidates(self, command, base):
         if command in (Command.ChatWith,):
             # consider all known users
-            # NOTE: this can take a long time, we'd need some kind of UI
-            # feedback to indicate that something is going on
             users = self.m_controller.getKnownUsers(load_all_users=True)
         else:
             # only consider users in the current room

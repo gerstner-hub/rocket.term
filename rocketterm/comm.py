@@ -234,9 +234,14 @@ class RocketComm:
 
         return (total, [rocketterm.types.UserInfo(data) for data in members])
 
-    def getUserList(self):
+    def getUserList(self, progress_cb=None):
         """Retrieves a full list of users on the server. Returns a list of
-        BasicUserInfo instances."""
+        BasicUserInfo instances.
+
+        :param progress_cb: A callback function that is called for each chunk
+            of users loaded from the server. It receives two parameters:
+            number of users already loaded, total number of users to load.
+        """
 
         offset = 0
 
@@ -254,8 +259,12 @@ class RocketComm:
             ret.extend([rocketterm.types.BasicUserInfo(info) for info in resp["users"]])
 
             offset += len(resp["users"])
+            total_users = resp["total"]
 
-            if offset >= resp["total"]:
+            if progress_cb:
+                progress_cb(offset, total_users)
+
+            if offset >= total_users:
                 break
 
         return ret

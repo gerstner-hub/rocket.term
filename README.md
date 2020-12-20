@@ -246,9 +246,10 @@ this reason most data is only loaded on demand as new rooms are selected, as
 new users appear and as chat history is loaded actively by the user.
 
 Loading large user lists or the complete history of a chat room with many
-messages can take a longer time. Currently there is no user feedback
-implemented for when this happens, so the application can be unreactive for a
-couple of seconds or worse in these situations.
+messages can take a longer time. For the most common operations of this kind
+feedback will be displayed in the status output bar so you know what is going
+on. There is currently no way to interrupt long lasting operations on user
+request.
 
 ## Contributing and Bug Reporting
 

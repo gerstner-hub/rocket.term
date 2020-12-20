@@ -65,6 +65,7 @@ class Screen:
         self.m_room_states = {}
         # the currently selected room object
         self.m_current_room = None
+        self.m_loop_running = False
 
         # a frame that we use just for its header, which becomes a bar
         # displaying the room topic
@@ -1114,6 +1115,48 @@ class Screen:
         self.m_chat_box.set_focus_valign("top")
         self.m_chat_box.set_focus(row_nr)
 
+    def loadHistoryStarted(self, room):
+        """Called by the controller when time intensive room history loads are
+        about to be started.
+
+        This allows to give some kind of visual user feedback so it is clear
+        what is going on.
+        """
+
+        if not self.m_loop_running:
+            return
+
+        rlabel = room.typePrefix() + room.getName()
+        total_msgs = self.m_controller.getRoomMsgCount(room)
+        cur_msgs = len(self.m_controller.getCachedRoomMessages(room))
+
+        feedback = "Loading more chat history from {} ({}/{})".format(
+                rlabel, cur_msgs, "?" if total_msgs == -1 else total_msgs
+        )
+
+        self._setStatusMessage(feedback)
+        self.m_loop.draw_screen()
+
+    def loadHistoryEnded(self, room):
+        """Like loadHistoryStarted(), but after a chunk of history was
+        received."""
+        self.loadHistoryStarted(room)
+
+    def loadUsersInProgress(self, so_far, total):
+        """Called by the controller when time intensive user loads are in
+        progress.
+
+        This allows to give some kind of visual user feedback so it is clear
+        what is going on.
+        """
+        if not self.m_loop_running:
+            return
+        feedback = "Loading user list from server ({}/{})".format(
+            so_far, total
+        )
+        self._setStatusMessage(feedback)
+        self.m_loop.draw_screen()
+
     def mainLoop(self):
         """The urwid main loop that processes UI and Controller events."""
 
@@ -1133,9 +1176,12 @@ class Screen:
         self._updateMainHeading()
 
         try:
+            self.m_loop_running = True
             self.m_loop.run()
         except KeyboardInterrupt:
             pass
+        finally:
+            self.m_loop_running = False
 
         self.m_controller.stop()
         os.close(self.m_urwid_pipe)

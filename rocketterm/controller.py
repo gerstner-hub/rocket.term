@@ -305,6 +305,8 @@ class Controller:
         msgs = self.m_room_msgs.setdefault(room.getID(), [])
         oldest_known = msgs[-1] if msgs else None
 
+        self.m_callbacks.loadHistoryStarted(room)
+
         remaining, new_msgs = self.m_comm.getRoomMessages(
                 room, self.m_msg_batch_size, oldest_known)
         if not new_msgs or remaining == 0:
@@ -323,6 +325,8 @@ class Controller:
         msgs.extend(new_msgs)
 
         self.m_room_msg_count.setdefault(room.getID(), remaining + len(msgs))
+
+        self.m_callbacks.loadHistoryEnded(room)
 
         return new_msgs
 
@@ -343,14 +347,15 @@ class Controller:
         """Returns the number of messages available in the given room (or the
         currently selected room).
 
-        This includes messages not yet cached by the Controller.
+        This includes messages not yet cached by the Controller. If the amount
+        is not yet known then -1 is returned.
         """
         room = self._getRoomToOperateOn(room)
         if not room:
             # no room at all available
             return 0
 
-        return self.m_room_msg_count[room.getID()]
+        return self.m_room_msg_count.get(room.getID(), -1)
 
     def getSelectedRoom(self):
         """Returns the currently selected room object or None if none is
@@ -822,7 +827,10 @@ class Controller:
         if self.m_user_list_cached:
             return
 
-        for info in self.m_comm.getUserList():
+        def userLoadProgress(so_far, total):
+            self.m_callbacks.loadUsersInProgress(so_far, total)
+
+        for info in self.m_comm.getUserList(progress_cb=userLoadProgress):
             self._cacheUserInfo(info)
 
         self.m_user_list_cached = True
