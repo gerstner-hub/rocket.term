@@ -49,7 +49,6 @@ class Screen:
         self.m_global_objects = global_objects
         self.m_controller = rocketterm.controller.Controller(self, self.m_comm)
         self.m_global_objects.controller = self.m_controller
-        self.m_cmd_parser = rocketterm.parser.Parser(self.m_global_objects)
         # this is the chat / command input area
         self.m_cmd_input = CommandInput(self._commandEntered, self._completeCommand)
         # this will display the current room's messages
@@ -1171,6 +1170,7 @@ class Screen:
         """The urwid main loop that processes UI and Controller events."""
 
         self.m_urwid_pipe = self.m_loop.watch_pipe(self._externalEvent)
+        self.m_cmd_parser = rocketterm.parser.Parser(self.m_global_objects)
 
         self.m_controller.start(self._getRows())
         default_room = self.m_global_objects.config["default_room"]
