@@ -23,4 +23,5 @@ for fn in os.listdir(package):
 
 	pars.append(str(package / fn))
 
-subprocess.call([flake8] + pars)
+res = subprocess.call([flake8] + pars)
+sys.exit(res)
