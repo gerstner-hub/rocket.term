@@ -384,7 +384,7 @@ class Screen:
         for nr, msg in enumerate(messages):
             self._addChatMessage(msg, at_end=False)
 
-        self._resolveThreadMessages()
+        self._resolveMessageReferences()
         self._scrollMessages(ScrollDirection.NEWEST)
 
         self.m_logger.debug(
@@ -393,8 +393,8 @@ class Screen:
                 )
         )
 
-    def _resolveThreadMessages(self):
-        # To resolve thread messages lazily we need to check whether any
+    def _resolveMessageReferences(self):
+        # To resolve message references lazily we need to check whether any
         # unresolved messages remain when we load more messages on demand.
         #
         # If this is the case, load more chat history until no
@@ -923,7 +923,7 @@ class Screen:
                 # box body somehow are not reliable any more
                 focused_msg = self._getFocusedMessageNr()
                 new_msgs = self._loadMoreChatHistory()
-                new_msgs += self._resolveThreadMessages()
+                new_msgs += self._resolveMessageReferences()
                 self.scrollToMessage(focused_msg)
             self.m_chat_box.scrollUp(small_increments)
             return
@@ -1018,6 +1018,11 @@ class Screen:
         if room_id == self.m_current_room.getID():
             self.m_room_msg_count = self.m_controller.getRoomMsgCount()
             self._addChatMessage(msg, at_end=True)
+            if msg.isIncrementalUpdate():
+                # if this related to an older message then make sure we
+                # resolve any unresolved references
+                self._resolveMessageReferences()
+                self._scrollMessages(ScrollDirection.NEWEST)
         else:
             if self.m_controller.doesMessageMentionUs(msg):
                 new_state = RoomState.ATTENTION
@@ -1105,7 +1110,7 @@ class Screen:
         while msg_nr < self._getOldestLoadedMsgNr():
             # load more chat history
             new_msgs = self._loadMoreChatHistory()
-            new_msgs += self._resolveThreadMessages()
+            new_msgs += self._resolveMessageReferences()
 
         row_nr = self._getMsgRowNr(msg_nr)
 
