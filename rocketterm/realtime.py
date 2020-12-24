@@ -328,12 +328,14 @@ class RealtimeSession:
         type."""
         return self._waitForIncoming(lambda msg: msg.get("msg", "") == _type)
 
-    def methodCall(self, method, params):
+    def methodCall(self, method, params, check_error_reply=True):
         """Performs a method call and synchronously returns the result.
 
         :param str method: The method name to invoke.
         :param dict params: The parameter data structure to pass to the
                             method.
+        :param bool check_error_reply: If True then on non-successful replies
+                                       an Exception will be thrown.
         :return dict: The deserialized reply message.
         """
 
@@ -350,6 +352,9 @@ class RealtimeSession:
         self.request(req)
 
         reply = self.receiveReply(req["id"])
+
+        if check_error_reply:
+            self._checkErrorReply(reply)
 
         return reply
 
@@ -400,7 +405,7 @@ class RealtimeSession:
 
         :param login_data: An instance of TokenLoginData or PasswordLoginData.
         """
-        resp = self.methodCall("login", login_data)
+        resp = self.methodCall("login", login_data, check_error_reply=False)
 
         if 'error' in resp:
             error = resp['error']
@@ -514,9 +519,7 @@ class RealtimeSession:
         msg = rocketterm.types.RoomMessage.createNew(
                 rid, msg, thread_id=thread_id
         )
-        resp = self.methodCall("sendMessage", msg.getRaw())
-
-        return self._checkErrorReply(resp)
+        return self.methodCall("sendMessage", msg.getRaw())
 
     def getJoinedRooms(self, changes_since_ts=0):
         """Returns a sequence of data structures representing the
@@ -533,9 +536,7 @@ class RealtimeSession:
             "$date": changes_since_ts
         }
 
-        resp = self.methodCall("rooms/get", params)
-
-        return self._checkErrorReply(resp)
+        return self.methodCall("rooms/get", params)
 
     def getSubscriptions(self, changes_since_ts=0):
         """Returns a list of Subscriptions that the logged in user
@@ -551,9 +552,7 @@ class RealtimeSession:
             "$date": changes_since_ts
         }
 
-        resp = self.methodCall("subscriptions/get", params)
-
-        return self._checkErrorReply(resp)
+        return self.methodCall("subscriptions/get", params)
 
     def getRoomHistory(self, rid, num_msgs, max_ts=None, last_update=None):
         """Returns a number of chat messages for the given room ID.
@@ -573,11 +572,7 @@ class RealtimeSession:
 
         params = [rid, max_ts, num_msgs, {"$date": last_update}]
 
-        resp = self.methodCall("loadHistory", params)
-
-        self._checkErrorReply(resp)
-
-        return resp
+        return self.methodCall("loadHistory", params)
 
     def hideRoom(self, rid):
         """Hides the given room ID.
@@ -591,11 +586,7 @@ class RealtimeSession:
 
         params = [rid]
 
-        resp = self.methodCall("hideRoom", params)
-
-        self._checkErrorReply(resp)
-
-        return resp
+        return self.methodCall("hideRoom", params)
 
     def openRoom(self, rid):
         """Opens the given room ID.
@@ -606,11 +597,7 @@ class RealtimeSession:
 
         params = [rid]
 
-        resp = self.methodCall("openRoom", params)
-
-        self._checkErrorReply(resp)
-
-        return resp
+        return self.methodCall("openRoom", params)
 
     def eraseRoom(self, rid):
         """Deletes a public channel or private group permanently.
@@ -618,11 +605,7 @@ class RealtimeSession:
         This requires proper user permissions to do so.
         """
 
-        resp = self.methodCall("eraseRoom", [rid])
-
-        self._checkErrorReply(resp)
-
-        return resp
+        return self.methodCall("eraseRoom", [rid])
 
     def setUserPresence(self, status):
         """Sets the user presence status of the currently logged in
@@ -634,11 +617,7 @@ class RealtimeSession:
 
         params = [status.value]
 
-        resp = self.methodCall("UserPresence:setDefaultStatus", params)
-
-        self._checkErrorReply(resp)
-
-        return resp
+        return self.methodCall("UserPresence:setDefaultStatus", params)
 
     def setRoomTopic(self, rid, topic):
         """Changes the room topic for the given room ID.
@@ -651,11 +630,7 @@ class RealtimeSession:
 
         params = [rid, "roomTopic", topic]
 
-        resp = self.methodCall("saveRoomSettings", params)
-
-        self._checkErrorReply(resp)
-
-        return resp
+        return self.methodCall("saveRoomSettings", params)
 
     def createDirectChat(self, username):
         """Creates a new direct chat to communicate with the given username.
@@ -669,8 +644,4 @@ class RealtimeSession:
 
         params = [username]
 
-        resp = self.methodCall("createDirectMessage", params)
-
-        self._checkErrorReply(resp)
-
-        return resp
+        return self.methodCall("createDirectMessage", params)
