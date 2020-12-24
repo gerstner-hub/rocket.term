@@ -330,7 +330,7 @@ class Controller:
 
         return self.m_room_msgs.get(room.getID(), [])
 
-    def loadMoreRoomMessages(self, room=None):
+    def loadMoreRoomMessages(self, room=None, amount=None):
         """Loads additional message history for the given room object.
 
         The newly loaded RoomMessage objects will be returned as a list,
@@ -344,13 +344,16 @@ class Controller:
         elif room.getID() in self.m_history_complete:
             return []
 
+        if not amount:
+            amount = self.m_msg_batch_size
+
         msgs = self.m_room_msgs.setdefault(room.getID(), [])
         oldest_known = msgs[-1] if msgs else None
 
         self.m_callbacks.loadHistoryStarted(room)
 
         remaining, new_msgs = self.m_comm.getRoomMessages(
-                room, self.m_msg_batch_size, oldest_known)
+                room, amount, oldest_known)
         if not new_msgs or remaining == 0:
             self.m_history_complete.add(room.getID())
 
