@@ -242,6 +242,8 @@ class RealtimeSession:
 
             if tag == "error-action-not-allowed":
                 raise rocketterm.types.ActionNotAllowed(error)
+            elif tag == "too-many-requests":
+                raise rocketterm.types.TooManyRequests(error)
             else:
                 raise rocketterm.types.MethodCallError(error)
 

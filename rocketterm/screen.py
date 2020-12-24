@@ -1111,6 +1111,11 @@ class Screen:
         self.m_chat_box.set_focus_valign("top")
         self.m_chat_box.set_focus(row_nr)
 
+    def commandFeedback(self, msg):
+
+        self._setStatusMessage(msg)
+        self.m_loop.draw_screen()
+
     def loadHistoryStarted(self, room):
         """Called by the controller when time intensive room history loads are
         about to be started.

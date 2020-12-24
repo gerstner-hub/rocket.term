@@ -26,6 +26,13 @@ class ActionNotAllowed(Exception):
         self.m_error = error
 
 
+class TooManyRequests(Exception):
+
+    def __init__(self, error, *args, **kwargs):
+        super().__init__(error, *args, **kwargs)
+        self.m_error = error
+
+
 class LoginError(Exception):
 
     def __init__(self, *args, **kwargs):

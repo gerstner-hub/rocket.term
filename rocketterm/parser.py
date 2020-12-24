@@ -11,6 +11,7 @@ import rocketterm.types
 class Command(Enum):
     """All supported commands and their text labels."""
     SendMessage = "send"
+    RepeatMessage = "repeat"
     ReplyInThread = "reply"
     HideRoom = "hide"
     OpenRoom = "open"
@@ -38,6 +39,8 @@ class Command(Enum):
 # the first format placeholder will receive the actual command name
 USAGE = {
     Command.SendMessage: "[/{}] text...: creates a new message with the given text in the currently selected room",
+    Command.RepeatMessage: "/{} COUNT text: repeatedly send a message. "
+                           "The optional placeholder {MSGNUM} in the text will be replaced by the iterator count.",
     Command.ReplyInThread: "/{} #MSGSPEC text...: replies to another message or thread in the currently selected room",
     Command.HideRoom: "/{} [ROOMSPEC]: hides the current or specified room without leaving / unsubscribing from it",
     Command.OpenRoom: "/{} ROOMSPEC: re-adds the specified room that was previously hidden",
@@ -67,7 +70,8 @@ HIDDEN_COMMANDS = set([
     Command.OpenDebugger,
     Command.SetDefaultLogLevel,
     Command.AddLogfile,
-    Command.SetLogLevel
+    Command.SetLogLevel,
+    Command.RepeatMessage
 ])
 
 
@@ -558,6 +562,33 @@ class Parser:
             return "Invalid number of arguments"
 
         self.m_controller.sendMessage(args[0])
+
+    def _handleRepeat(self, args):
+        if len(args) != 2:
+            return "Expected two arguments: COUNT text..."
+
+        try:
+            count = int(args[0])
+        except ValueError:
+            return "COUNT '{}' is not an integer".format(args[0])
+
+        if count > 1000 or count < 0:
+            return "Refusing to repeat with excess or negative count {}".format(count)
+
+        for i in range(count):
+            text = args[1].replace("{MSGNUM}", str(i+1))
+            while True:
+                try:
+                    self.m_controller.sendMessage(text)
+                    break
+                except rocketterm.types.TooManyRequests:
+                    import time
+                    self.m_screen.commandFeedback(
+                        "{}/{} messages sent. Server slows us down, waiting ...".format(
+                            i + 1, count
+                        )
+                    )
+                    time.sleep(1.0)
 
     def _processMsgNrArg(self, arg):
         msg_count = self.m_controller.getRoomMsgCount()
