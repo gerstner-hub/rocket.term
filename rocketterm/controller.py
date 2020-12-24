@@ -628,50 +628,104 @@ class Controller:
             self.m_pending_events.append((callback, args, kwargs))
         self.m_callbacks.asyncEventOccured()
 
-    def _ignoreMessageEvent(self, msg):
-        # ignore these duplicate thread root message reports
-        # they're only sent duplicate in the event subscription, not
-        # when loading the room history explicitly
-        return msg.getNumReplies() != 0
+    def _getNewestMessage(self, msgs):
+        for newest in msgs:
+            if newest.isIncrementalUpdate():
+                continue
+
+            return newest
+
+        self.m_logger.error("couldn't find newest message! Assuming no update...")
+        return None
+
+    def _isMessageUpdate(self, room_msgs, msg):
+        """Returns a boolean whether the given RoomMessage is only an update
+        for an existing message."""
+
+        if not room_msgs:
+            # the room had no messages before so it must be a new message
+            return False
+
+        newest = self._getNewestMessage(room_msgs)
+
+        if not newest:
+            return False
+
+        return msg.getClientTimestamp() <= newest.getClientTimestamp()
+
+    def _ignoreMessageUpdate(self, room_msgs, msg):
+        """Returns a boolean whether the given updated RoomMessage should be
+        ignored from processing."""
+
+        newest = self._getNewestMessage(room_msgs)
+
+        # if the update wasn't applied yet on the server side, ignore this.
+        # This happens e.g. when new reactions are added, then multiple
+        # notifications go out, the first one will not have an updated
+        # timestamp.
+        return msg.getServerTimestamp() <= newest.getServerTimestamp()
 
     def _newRoomMessage(self, collection, event, msg):
-        """Callback for handling new room message events."""
+        """Callback for handling new room message events.
 
-        if self._ignoreMessageEvent(msg):
-            return
+        The logic for this is surprisingly complex, because updates of old
+        messages are not communicated very well by the server and spurious
+        updates are also sent out with incomplete information.
+        """
 
         room = self.m_rooms.get(msg.getRoomID())
-        msgs = self.m_room_msgs.setdefault(room.getID(), [])
-        id_map = self.m_room_msg_ids.setdefault(room.getID(), {})
-        old_msg = id_map.get(msg.getID(), None)
-        id_map[msg.getID()] = msg
+        messages = self.m_room_msgs.setdefault(room.getID(), [])
+        msg_map = self.m_room_msg_ids.setdefault(room.getID(), {})
+        orig_msg = msg_map.get(msg.getID(), None)
 
-        if old_msg:
-            msg = self._handleMessageUpdate(old_msg, msg)
-
-            if not msg:
-                # ignore the message
+        if orig_msg:
+            if orig_msg.getServerTimestamp() == msg.getServerTimestamp():
+                # ignore this, it's some garbage update the server sent
                 return
-        else:
-            # opportunistically cache new info
-            user_info = msg.getUserInfo()
-            self._cacheUserInfo(user_info)
-            self._cacheRoomMember(room, user_info)
 
-        try:
-            self.m_room_msg_count[room.getID()] += 1
-        except KeyError:
-            # no history was loaded yet, will be set during
-            # loadMoreRoomMessages()
-            pass
+        is_update = self._isMessageUpdate(messages, msg)
 
-        msgs[0:0] = [msg]
-        self.m_callbacks.handleNewRoomMessage(msg)
+        if is_update and self._ignoreMessageUpdate(messages, msg):
+            return
 
-    def _handleMessageUpdate(self, old_msg, msg):
-        """This happens e.g. when reactions are added to messages. Try
-        to filter out useless updates, otherwise try to make clear
-        what happened by changing message content."""
+        # opportunistically cache new info
+        self._cacheMessage(room, msg)
+
+        msg_to_add = msg
+
+        if is_update:
+            if orig_msg:
+                msg_to_add = self._getUpdateMessage(orig_msg, msg)
+            else:
+                # this is an update for an old message that we didn't cache
+                # yet. in this case we can't calculate differences
+                msg_to_add = copy.deepcopy(msg)
+                msg_to_add.setMessage("message was updated (unable to deduce exactly what)")
+                msg_to_add.setIsIncrementalUpdate(True)
+
+        if not msg_to_add:
+            # ignore the update
+            return
+
+        messages[0:0] = [msg_to_add]
+        self.m_room_msg_count[room.getID()] += 1
+        self.m_callbacks.handleNewRoomMessage(msg_to_add)
+
+    def _getUpdateMessage(self, old_msg, new_msg):
+        """Calculate an incremental message update message when existing chat
+        message are altered.
+
+        This happens e.g. when reactions are added to messages, new thread
+        messages appear or message text is edited etc. Try to filter out
+        useless updates, otherwise try to make clear what happened by changing
+        message content.
+
+        The handling is quite complex, because the data structures provided
+        by stream-room-messages make it hard to understand what is going on.
+        It seems to be the case that upon a message update first the previous
+        state of the message is sent (again, seemingly unmotivated) and then
+        the new state of the message.
+        """
 
         # we could also simply update the original message. this would
         # be easier on the implementation side. on the other hand this
@@ -681,18 +735,29 @@ class Controller:
         # once the program is restarted only a single message will
         # appear anymore.
 
-        if msg.wasEdited() and msg.getEditTime() != old_msg.getEditTime():
+        if new_msg.wasEdited() and new_msg.getEditTime() != old_msg.getEditTime():
             # edited messages are handled by Screen itself
-            return msg
-
-        old_reactions = old_msg.getReactions()
-        new_reactions = msg.getReactions()
-
-        if old_reactions == new_reactions:
+            return new_msg
+        elif new_msg.getNumReplies() != old_msg.getNumReplies():
+            # a thread was opened or altered, ignore
+            # (we could make a "thread activity callback" out of this somewhen)
+            return None
+        elif old_msg.getReactions() != new_msg.getReactions():
+            ret = copy.deepcopy(new_msg)
+            self._handleChangedReactions(old_msg, ret)
+        else:
+            self.m_logger.warning("unhandled message update. old = {}, new = {}".format(
+                old_msg.getRaw(), new_msg.getRaw()))
             return None
 
-        ret = copy.deepcopy(msg)
+        ret.setIsIncrementalUpdate(True)
 
+        return ret
+
+    def _handleChangedReactions(self, old_msg, new_msg):
+
+        old_reactions = old_msg.getReactions()
+        new_reactions = new_msg.getReactions()
         new_text = []
 
         user_prefix = rocketterm.types.BasicUserInfo.typePrefix()
@@ -721,10 +786,7 @@ class Controller:
                         "{}{} removed {} reaction".format(user_prefix, user, reaction)
                     )
 
-        ret.setMessage('\n'.join(new_text))
-        ret.setIsIncrementalUpdate(True)
-
-        return ret
+        new_msg.setMessage('\n'.join(new_text))
 
     def _subscriptionEvent(self, collection, change_type, event, data):
         """Called when something related to the user's subscriptions changes
@@ -856,6 +918,11 @@ class Controller:
         sub_state = self.m_comm.subscribeForRoomMessages(room, callback)
         self.m_room_subscriptions[room.getID()] = sub_state
         self.m_rooms[room.getID()] = room
+        # load initial messages for the room. To process room message events
+        # in the callback correctly later on we need at least the newest
+        # message. It doesn't seem to make a big difference if we load just
+        # one message or a batch of message startup time wise.
+        self.loadMoreRoomMessages(room)
 
     def _delRoom(self, rid):
         try:
@@ -905,6 +972,15 @@ class Controller:
             self._cacheUserInfo(info)
 
         self.m_user_list_cached = True
+
+    def _cacheMessage(self, room, msg):
+        # in any case cache the new message so we always have the most recent version
+        msg_map = self.m_room_msg_ids.setdefault(room.getID(), {})
+        msg_map[msg.getID()] = msg
+
+        user_info = msg.getUserInfo()
+        self._cacheUserInfo(user_info)
+        self._cacheRoomMember(room, user_info)
 
     def _cacheUserInfo(self, info):
         self.m_basic_user_infos.setdefault(info.getID(), info)
