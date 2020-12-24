@@ -348,7 +348,14 @@ class Controller:
             amount = self.m_msg_batch_size
 
         msgs = self.m_room_msgs.setdefault(room.getID(), [])
-        oldest_known = msgs[-1] if msgs else None
+        for msg in reversed(msgs):
+            if msg.isIncrementalUpdate():
+                continue
+
+            oldest_known = msg
+            break
+        else:
+            oldest_known = None
 
         self.m_callbacks.loadHistoryStarted(room)
 
