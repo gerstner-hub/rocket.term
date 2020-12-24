@@ -74,7 +74,9 @@ class Controller:
         # loaded
         self.m_history_complete = set()
         # room ID -> number of messages a room has. this includes all chat
-        # history that might not yet have been cached
+        # history that might not yet have been cached, also incremental
+        # message updates that we included ourselves and are unknown by the
+        # server
         self.m_room_msg_count = dict()
         # room ID -> EventSubscription. holds the individual subscriptions we
         # register for each subscribed room we have.
@@ -364,6 +366,9 @@ class Controller:
 
         msgs.extend(new_msgs)
 
+        # NOTE: this count includes incremental update messages that the
+        # server doesn't know about i.e. our total message count can be higher
+        # for a room than what the server tells us.
         self.m_room_msg_count.setdefault(room.getID(), remaining + len(msgs))
 
         self.m_callbacks.loadHistoryEnded(room)
