@@ -1016,6 +1016,7 @@ class Screen:
         room_id = msg.getRoomID()
 
         if room_id == self.m_current_room.getID():
+            self.m_room_msg_count = self.m_controller.getRoomMsgCount()
             self._addChatMessage(msg, at_end=True)
         else:
             if self.m_controller.doesMessageMentionUs(msg):
