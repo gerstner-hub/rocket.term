@@ -107,6 +107,8 @@ class Controller:
         # whether the full user list from the server has already been cached.
         # This is an time expensive operation...
         self.m_user_list_cached = False
+        # cached EmojiInfo instances from the server
+        self.m_custom_emoji_list = None
         self.m_started = False
 
     def start(self, msg_batch_size):
@@ -329,6 +331,13 @@ class Controller:
             return []
 
         return self.m_room_msgs.get(room.getID(), [])
+
+    def getMessageFromID(self, msg_id, room=None):
+        room = self._getRoomToOperateOn(room)
+        if not room:
+            return None
+
+        return self.m_room_msg_ids[room.getID()][msg_id]
 
     def loadMoreRoomMessages(self, room=None, amount=None):
         """Loads additional message history for the given room object.
@@ -611,6 +620,24 @@ class Controller:
 
         self.m_comm.joinChannel(room)
         self.m_awaited_room = room
+
+    def getEmojiData(self):
+        """Returns a dictionary of emoji categories and their names.
+
+        Example return value: {
+            "custom": [ "myemoji", "youremoji" ],
+            [...]
+        }
+        """
+        if self.m_custom_emoji_list is None:
+            self.m_custom_emoji_list = self.m_comm.getCustomEmojiList()
+
+        import rocketterm.emojis
+
+        ret = copy.copy(rocketterm.emojis.EMOJIS_BY_CATEGORY)
+        ret['custom'] = [emoji.getName() for emoji in self.m_custom_emoji_list]
+
+        return ret
 
     def _getRoomToOperateOn(self, room):
         """Helper function to implement the often used logic to operate either

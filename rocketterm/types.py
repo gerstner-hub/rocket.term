@@ -760,3 +760,25 @@ class RoomMessage:
             ':coffee': {'usernames': ['user1', 'user2']}
         }."""
         return self.m_data.get("reactions", {})
+
+
+class EmojiInfo:
+
+    def __init__(self, data):
+        self.m_data = data
+
+    def getID(self):
+        return self.m_data["_id"]
+
+    def getName(self):
+        return self.m_data["name"]
+
+    def getAliases(self):
+        return self.m_data.get("aliases", [])
+
+    def getExtension(self):
+        """Returns a image type extension like 'gif'."""
+        return self.m_data.get("extension", None)
+
+    def getUpdateTime(self):
+        return rcTimeToDatetime(self.m_data["_updatedAt"]["$date"])

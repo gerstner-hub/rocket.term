@@ -34,6 +34,7 @@ class Command(Enum):
     SetDefaultLogLevel = "setdefaultloglevel"
     SetLogLevel = "setloglevel"
     AddLogfile = "addlogfile"
+    SetReaction = "react"
 
 
 # the first format placeholder will receive the actual command name
@@ -63,7 +64,8 @@ USAGE = {
     Command.OpenDebugger: "/{}: opens an interactive python debugger to inspect program state. This requires urxvt.",
     Command.SetDefaultLogLevel: "/{} LOGLEVEL: adjusts the default Python loglevel.",
     Command.SetLogLevel: "/{} LOGGER=LOGLEVEL: adjusts the logleven of the given Python logger.",
-    Command.AddLogfile: "/{} PATH: adds a logfile path to output Python logging to."
+    Command.AddLogfile: "/{} PATH: adds a logfile path to output Python logging to.",
+    Command.SetReaction: "/{} #MSGSPEC [+|-]EMOJI: add or removes a reaction to/from a message."
 }
 
 HIDDEN_COMMANDS = set([
@@ -119,7 +121,8 @@ class Parser:
         self.m_special_completers = {
             Command.SetUserStatus: self._getUserStatusCompletionCandidates,
             Command.Help: self._getHelpCompletionCandidates,
-            Command.JoinChannel: self._getChannelCompletionCandidates
+            Command.JoinChannel: self._getChannelCompletionCandidates,
+            Command.SetReaction: self._getReactionCompletionCandidates
         }
 
     def commandEntered(self, line):
@@ -333,6 +336,44 @@ class Parser:
                 ret.append(label)
 
         return ret
+
+    def _getReactionCompletionCandidates(self, command, args):
+        if not args or len(args) != 2:
+            return []
+
+        # syntax: #msgnr [+|-]:<emoji>:
+
+        emoji = args[1]
+
+        operator = emoji[0]
+        if operator in ('+', '-'):
+            if len(emoji) > 1:
+                prefix = emoji[1]
+                base = emoji[1:]
+            else:
+                return []
+        else:
+            operator = '+'
+            prefix = emoji[0]
+            base = emoji
+
+        if prefix != ':':
+            return []
+
+        candidates = self._getEmojiCompletionCandidates(command, base)
+
+        if emoji.startswith(operator):
+            candidates = [operator + cand for cand in candidates]
+
+        return candidates
+
+    def _getEmojiCompletionCandidates(self, command, base):
+        emojis_dict = self.m_controller.getEmojiData()
+        emojis = sum(emojis_dict.values(), [])
+
+        emoji_names = [':{}:'.format(emoji) for emoji in emojis]
+        candidates = [emoji for emoji in emoji_names if emoji.startswith(base)]
+        return candidates
 
     def _getParameterCompletionCandidates(self, command, args):
         """Performs generic parameter completion for rooms, users etc."""
@@ -703,6 +744,35 @@ class Parser:
             return "Failed with: {}".format(str(e))
 
         return "Jumped to #{}".format(nr)
+
+    def _handleReact(self, args):
+
+        if len(args) != 2:
+            return "invalid number of arguments. Example: /react #432 :crying:"
+
+        msg_nr = self._processMsgNrArg(args[0])
+        msg_id = self.m_screen.getMsgIDForNr(msg_nr)
+
+        emoji = args[1]
+
+        add_reaction = True
+        if emoji.startswith('+'):
+            emoji = emoji[1:]
+        elif emoji.startswith('-'):
+            add_reaction = False
+            emoji = emoji[1:]
+
+        if not emoji.startswith(':') or not emoji.endswith(':'):
+            return "invalid emoji syntax {}. needs to be surrounded with ':' like ':crying:'".format(emoji)
+
+        msg = self.m_controller.getMessageFromID(msg_id)
+
+        if add_reaction:
+            self.m_comm.addReaction(msg, emoji)
+            return "Added reaction {} to {}".format(emoji, args[0])
+        else:
+            self.m_comm.delReaction(msg, emoji)
+            return "Removed reaction {} from {}".format(emoji, args[0])
 
     def _handleDiscussions(self, args):
         if len(args) != 0:

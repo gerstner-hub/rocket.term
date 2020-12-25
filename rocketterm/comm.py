@@ -578,3 +578,17 @@ class RocketComm:
                 room.getLabel(),
                 e.getErrorText()
             ))
+
+    def getCustomEmojiList(self):
+        """Returns a list of EmojiInfo instances representing the known
+        custom emojis on the server."""
+
+        emojis = self.m_rt_session.listCustomEmojis()
+
+        return [rocketterm.types.EmojiInfo(d) for d in emojis['result']]
+
+    def addReaction(self, msg, reaction):
+        self.m_rt_session.setReaction(msg.getID(), reaction, True)
+
+    def delReaction(self, msg, reaction):
+        self.m_rt_session.setReaction(msg.getID(), reaction, False)

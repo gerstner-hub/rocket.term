@@ -645,3 +645,18 @@ class RealtimeSession:
         params = [username]
 
         return self.methodCall("createDirectMessage", params)
+
+    def listCustomEmojis(self):
+        """Returns a list of all custom emoji names the server knows about."""
+
+        return self.methodCall("listEmojiCustom", [])
+
+    def setReaction(self, msg_id, reaction, add=True):
+        """Adds or removes a reaction to/from the given message ID.
+
+        :param str reaction: A string like ':crying:', see listEmojis().
+        :param bool add: If set then the reaction will be added, otherwise it
+                         will be removed.
+        """
+
+        return self.methodCall("setReaction", [reaction, msg_id, add])
