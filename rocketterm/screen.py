@@ -483,8 +483,8 @@ class Screen:
             # three extra characters for the two spaces and the '#'
             return (max_width + 3) * ' '
 
-        parent_nr = self.m_msg_nr_map.get(parent, [None])[0]
-        if parent_nr is None:
+        nr_list = self.m_msg_nr_map.get(parent, [])
+        if not nr_list:
             # we don't know the thread parent yet ... fill in a placeholder
             # that we can later replace when we encounter the thread parent
             # message
@@ -493,6 +493,8 @@ class Screen:
             # use a marker that we can later
             # replace when we know the thread nr.
             parent_nr = '?' * max_width
+        else:
+            parent_nr = nr_list[0]
 
         return " #{} ".format(str(parent_nr).rjust(max_width))
 
