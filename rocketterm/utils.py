@@ -70,3 +70,19 @@ def getExceptionContext(ex):
     _, _, tb = sys.exc_info()
     fn, ln, _, _ = traceback.extract_tb(tb)[-1]
     return "{}:{}: {}".format(fn, ln, str(ex))
+
+
+def getMessageEditContext(room_msg):
+    """Returns an explanatory message for the given RoomMessage instance that
+    was edited.
+    """
+    assert room_msg.wasEdited()
+    editor = room_msg.getEditUser()
+    edited_by_self = editor == room_msg.getUserInfo()
+
+    edit_prefix = "[{}edited this message]".format(
+        "" if edited_by_self else room_msg.getEditUser().getUsername() + " "
+    )
+
+    text = "{}: {}".format(edit_prefix, room_msg.getMessage())
+    return text

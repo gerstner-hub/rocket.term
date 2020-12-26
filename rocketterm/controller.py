@@ -762,22 +762,24 @@ class Controller:
         # once the program is restarted only a single message will
         # appear anymore.
 
+        ret = copy.deepcopy(new_msg)
+        ret.setIsIncrementalUpdate(True)
+
+        # this is no special message type, we need to look for an 'editedAt'
+        # attribute
         if new_msg.wasEdited() and new_msg.getEditTime() != old_msg.getEditTime():
-            # edited messages are handled by Screen itself
-            return new_msg
+            text = rocketterm.utils.getMessageEditContext(new_msg)
+            ret.setMessage(text)
         elif new_msg.getNumReplies() != old_msg.getNumReplies():
             # a thread was opened or altered, ignore
             # (we could make a "thread activity callback" out of this somewhen)
             return None
         elif old_msg.getReactions() != new_msg.getReactions():
-            ret = copy.deepcopy(new_msg)
             self._handleChangedReactions(old_msg, ret)
         else:
             self.m_logger.warning("unhandled message update. old = {}, new = {}".format(
                 old_msg.getRaw(), new_msg.getRaw()))
             return None
-
-        ret.setIsIncrementalUpdate(True)
 
         return ret
 

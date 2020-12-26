@@ -511,31 +511,7 @@ class Screen:
 
         if _type == MessageType.RegularMessage:
             text = raw_message
-
-            # this is no special message type, regular messages
-            # can have empty text but a 'file' attachment.
-            if msg.wasEdited():
-                editor = msg.getEditUser()
-                edited_by_self = editor == msg.getUserInfo()
-                prev_nrs = self.m_msg_nr_map.get(msg.getID(), [])
-
-                if len(prev_nrs) <= 1:
-                    # there is no old entry, because the
-                    # editing happened without our
-                    # presence OR because a very old
-                    # message was edited that wasn't
-                    # loaded into the cache yet. Live with
-                    # that for now.
-                    edited_msg = "this message"
-                else:
-                    edited_msg = "#{}".format(prev_nrs[-2])
-
-                edit_prefix = "[{}edited {}]".format(
-                    "" if edited_by_self else msg.getEditUser().getUsername() + " ",
-                    edited_msg
-                )
-
-                text = "{}: {}".format(edit_prefix, text)
+            # NOTE: regular messages can have empty text but a 'file' attachment.
 
             if msg.isIncrementalUpdate():
                 nrs = self.m_msg_nr_map.get(msg.getID())
@@ -549,6 +525,11 @@ class Screen:
                 text = "{}: {}".format(label, msg.getMessage())
 
             else:
+                # this is no special message type, just a RegularMessage with
+                # an attribute
+                if msg.wasEdited():
+                    text = rocketterm.utils.getMessageEditContext(msg)
+
                 for reaction, info in msg.getReactions().items():
                     prefixed_users = [rocketterm.types.BasicUserInfo.typePrefix() + user for user in info['usernames']]
                     text += "\n[reacted with {}]: {}".format(
