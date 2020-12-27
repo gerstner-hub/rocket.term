@@ -362,10 +362,9 @@ class Screen:
         self.m_row_offset = 0
         self.m_row_index_bottom = 0
         self.m_row_index_top = -1
-        # a mapping of thread parent msg IDs to a list of consecutive
-        # numbers of chat messages waiting for the parent message to
-        # be resolved
-        self.m_waiting_for_thread_parent = {}
+        # a mapping of target msg IDs to a list of consecutive numbers of chat
+        # messages waiting for them to be resolved
+        self.m_waiting_for_msg_refs = {}
         messages = self.m_controller.getCachedRoomMessages()
         self.m_room_msg_count = self.m_controller.getRoomMsgCount()
 
@@ -388,9 +387,9 @@ class Screen:
         self._scrollMessages(ScrollDirection.NEWEST)
 
         self.m_logger.debug(
-                "Number of messages waiting for thread parent: {}".format(
-                    len(self.m_waiting_for_thread_parent)
-                )
+            "Number of messages waiting for message references: {}".format(
+                len(self.m_waiting_for_msg_refs)
+            )
         )
 
     def _resolveMessageReferences(self):
@@ -406,14 +405,14 @@ class Screen:
 
         extra_msgs = 0
 
-        while self.m_waiting_for_thread_parent:
+        while self.m_waiting_for_msg_refs:
             new_msgs = self._loadMoreChatHistory()
 
             if new_msgs == 0:
-                self.m_logger.warning("Failed to resolve some thread messages")
-                for parent, childs in self.m_waiting_for_thread_parent.items():
+                self.m_logger.warning("Failed to resolve some message references")
+                for target, waiters in self.m_waiting_for_msg_refs.items():
                     self.m_logger.warning("Waiting for #{}: {}".format(
-                        parent, ', '.join(['#' + str(cid) for cid in childs])
+                        target, ', '.join(['#' + str(waiter[0]) for waiter in waiters])
                     ))
                 break
 
@@ -488,8 +487,8 @@ class Screen:
             # we don't know the thread parent yet ... fill in a placeholder
             # that we can later replace when we encounter the thread parent
             # message
-            waiters = self.m_waiting_for_thread_parent.setdefault(parent, [])
-            waiters.append(consecutive_nr)
+            waiters = self.m_waiting_for_msg_refs.setdefault(parent, [])
+            waiters.append((consecutive_nr, msg))
             # use a marker that we can later
             # replace when we know the thread nr.
             parent_nr = '?' * max_width
@@ -522,8 +521,8 @@ class Screen:
                 else:
                     max_width = self._getMaxMsgNrWidth()
                     label = "[#{}]".format('?' * max_width)
-                    waiters = self.m_waiting_for_thread_parent.setdefault(msg.getID(), [])
-                    waiters.append(consecutive_nr)
+                    waiters = self.m_waiting_for_msg_refs.setdefault(msg.getID(), [])
+                    waiters.append((consecutive_nr, msg))
                 text = "{}: {}".format(label, msg.getMessage())
 
             else:
@@ -549,7 +548,6 @@ class Screen:
                         attach_prefix += ": "
 
                     text = attach_prefix + (text if text else "")
-
             return text
         elif _type in (MessageType.UserLeft, MessageType.UserJoined):
             uinfo = msg.getUserInfo()
@@ -650,19 +648,19 @@ class Screen:
 
         return base_nr + self.m_row_offset
 
-    def _checkUpdateThreadChilds(self, thread_nr, thread_msg):
-        if thread_msg.isIncrementalUpdate():
+    def _checkUpdateMsgReferences(self, msg_nr, msg):
+        if msg.isIncrementalUpdate():
             return
-        waiters = self.m_waiting_for_thread_parent.pop(thread_msg.getID(), [])
+        waiters = self.m_waiting_for_msg_refs.pop(msg.getID(), [])
 
-        for waiter_consecutive_nr in waiters:
-            self._updateThreadChildMessage(thread_nr, waiter_consecutive_nr)
+        for waiter_nr, waiter_msg in waiters:
+            self._updateMsgReferences(waiter_nr, waiter_msg)
 
-    def _updateThreadChildMessage(self, thread_nr, child_nr):
-        """Replaces the placeholder added in _getThreadLabel() earlier by the
-        actual thread ID that we now know."""
-        child_index = self._getMsgRowNr(child_nr)
-        row = self.m_chat_box.body[child_index]
+    def _updateMsgReferences(self, source_nr, source_msg):
+        """Replaces any pending placeholders added earlier by the actual
+        message IDs that we now know."""
+        source_index = self._getMsgRowNr(source_nr)
+        row = self.m_chat_box.body[source_index]
         text = row.text
 
         if len(text) < 2 or not text.startswith("#"):
@@ -673,34 +671,18 @@ class Screen:
 
         try:
             msg_nr = int(text[1:].split(None, 1)[0])
-            if msg_nr != child_nr:
-                raise Exception("mismatched child #nr")
-        except Exception:
+            if msg_nr != source_nr:
+                raise Exception("mismatched ref #nr")
+        except Exception as e:
             self.m_logger.warning(
-                "couldn't verify child msg nr in: {}".format(text)
+                    "couldn't verify child msg nr in: {}: {}".format(text, str(e))
             )
             return
 
-        max_width = self._getMaxMsgNrWidth()
-
-        # okay we now know that this is the message we're looking for.
-        replace_str = '#{}'.format(str(thread_nr).rjust(max_width))
-        needle = '#{}'.format('?' * (len(replace_str) - 1))
-
-        new_text = text.replace(needle, replace_str, 1)
-
-        if new_text == text:
-            self.m_logger.warning(
-                "couldn't replace placeholder in child msg: {}".format(text)
-            )
-
-        # this messes with the internals of urwid.Text, but
-        # there's no good other way, we'd need to reconstruct
-        # all the attributes for coloring etc.
-        # we make sure that the length of the text message is
-        # not changing, otherwise the markup would not be
-        # correct any more
-        row._text = new_text
+        # format the message again, resolving any unresolved msg# references
+        # in the process
+        new_text = self._formatChatMessage(source_msg, source_nr)
+        self.m_chat_box.body[source_index] = new_text
 
     def _getMaxMsgNrWidth(self):
         return len(str(self.m_room_msg_count + 1))
@@ -780,14 +762,13 @@ class Screen:
 
         self._maybeInsertDateBar(msg, at_end)
 
-        # update not yet resolved thread child numbers we may now be able to
-        # resolve with this new message
-        self._checkUpdateThreadChilds(msg_nr, msg)
         # remember which consecutive number this message has in our chat box
         # so that we can reference it later on if threaded messages occur
         self._recordMsgNr(msg_nr, msg, at_end)
-
         self.m_num_chat_msgs += 1
+        # update not yet resolved thread child numbers we may now be able to
+        # resolve with this new message
+        self._checkUpdateMsgReferences(msg_nr, msg)
 
         text = self._formatChatMessage(msg, msg_nr)
 
