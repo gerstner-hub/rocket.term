@@ -767,7 +767,17 @@ class Controller:
 
         # this is no special message type, we need to look for an 'editedAt'
         # attribute
-        if new_msg.wasEdited() and new_msg.getEditTime() != old_msg.getEditTime():
+        if new_msg.getMessageType() != old_msg.getMessageType():
+            MessageType = rocketterm.types.MessageType
+            if new_msg.getMessageType() == MessageType.MessageRemoved:
+                text = rocketterm.utils.getMessageRemoveContext(new_msg)
+                ret.setMessage(text)
+            else:
+                self.m_logger.warning("unhandled messge type change. old = {}, new = {}".format(
+                    old_msg.getRaw(), new_msg.getRaw()
+                ))
+                ret.setMessage("unknown message type change")
+        elif new_msg.wasEdited() and new_msg.getEditTime() != old_msg.getEditTime():
             text = rocketterm.utils.getMessageEditContext(new_msg)
             ret.setMessage(text)
         elif new_msg.getNumReplies() != old_msg.getNumReplies():

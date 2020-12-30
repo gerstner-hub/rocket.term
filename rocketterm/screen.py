@@ -497,9 +497,28 @@ class Screen:
 
         return " #{} ".format(str(parent_nr).rjust(max_width))
 
-    def _getMessageText(self, msg, consecutive_nr):
-        """Transforms the message's text into a sensible message, if
-        it is a special message type.
+    def _getUpdateText(self, msg, nr):
+        # TODO: currently the controller handles the text for updated message
+        # which is a bit inconsistent ... either all message text should be
+        # built in the Controller or all should be built in the Screen.
+        #
+        # only add the original message nr# as a prefix here and handle
+        # resolving of yet unknown message IDs.
+        nrs = self.m_msg_nr_map.get(msg.getID())
+        if nrs:
+            label = "[#{}]".format(nrs[0])
+        else:
+            max_width = self._getMaxMsgNrWidth()
+            label = "[#{}]".format('?' * max_width)
+            waiters = self.m_waiting_for_msg_refs.setdefault(msg.getID(), [])
+            waiters.append((nr, msg))
+
+        prefix = "{}: ".format(label)
+        return prefix + msg.getMessage()
+
+    def _getMessageText(self, msg):
+        """Transforms the message's text into a sensible message, if it is a
+        special message type.
 
         This function handles various special situations and returns text that
         tries to be helpful to the user.
@@ -514,40 +533,29 @@ class Screen:
             text = raw_message
             # NOTE: regular messages can have empty text but a 'file' attachment.
 
-            if msg.isIncrementalUpdate():
-                nrs = self.m_msg_nr_map.get(msg.getID())
-                if nrs:
-                    label = "[#{}]".format(nrs[0])
-                else:
-                    max_width = self._getMaxMsgNrWidth()
-                    label = "[#{}]".format('?' * max_width)
-                    waiters = self.m_waiting_for_msg_refs.setdefault(msg.getID(), [])
-                    waiters.append((consecutive_nr, msg))
-                text = "{}: {}".format(label, msg.getMessage())
+            # this is no special message type, just a RegularMessage with
+            # an attribute
+            if msg.wasEdited():
+                text = rocketterm.utils.getMessageEditContext(msg)
 
-            else:
-                # this is no special message type, just a RegularMessage with
-                # an attribute
-                if msg.wasEdited():
-                    text = rocketterm.utils.getMessageEditContext(msg)
+            for reaction, info in msg.getReactions().items():
+                prefixed_users = [rocketterm.types.BasicUserInfo.typePrefix() + user for user in info['usernames']]
+                text += "\n[reacted with {}]: {}".format(
+                    reaction, ', '.join(prefixed_users)
+                )
 
-                for reaction, info in msg.getReactions().items():
-                    prefixed_users = [rocketterm.types.BasicUserInfo.typePrefix() + user for user in info['usernames']]
-                    text += "\n[reacted with {}]: {}".format(
-                        reaction, ', '.join(prefixed_users)
-                    )
+            if msg.hasFile():
+                fi = msg.getFile()
+                attach_prefix = "[file attachment: {} ({})]".format(
+                    fi.getName(),
+                    fi.getMIMEType()
+                )
 
-                if msg.hasFile():
-                    fi = msg.getFile()
-                    attach_prefix = "[file attachment: {} ({})]".format(
-                        fi.getName(),
-                        fi.getMIMEType()
-                    )
+                if text:
+                    attach_prefix += ": "
 
-                    if text:
-                        attach_prefix += ": "
+                text = attach_prefix + (text if text else "")
 
-                    text = attach_prefix + (text if text else "")
             return text
         elif _type in (MessageType.UserLeft, MessageType.UserJoined):
             uinfo = msg.getUserInfo()
@@ -584,11 +592,8 @@ class Screen:
                 prefix, room.typeLabel(), raw_message
             )
         elif _type in (MessageType.MessageRemoved,):
-            uinfo = msg.getUserInfo()
-            actor = uinfo.getFriendlyName()
-            event = "{} has removed this message".format(actor)
-
-            return "[{}]".format(event)
+            text = rocketterm.utils.getMessageRemoveContext(msg)
+            return text
         elif _type == MessageType.DiscussionCreated:
             uinfo = msg.getUserInfo()
             actor = uinfo.getFriendlyName()
@@ -705,9 +710,11 @@ class Screen:
         messagewidth = max(self.m_chat_box.getNumCols(), 80) - prefix_len - 1
         indentation = (' ' * prefix_len)
 
-        # handle special message types by creating sensible text to
-        # display, does nothing for normal messages
-        msg_text = self._getMessageText(msg, nr)
+        if msg.isIncrementalUpdate():
+            msg_text = self._getUpdateText(msg, nr)
+        else:
+            # handle special message types by creating sensible text to display
+            msg_text = self._getMessageText(msg)
 
         # the textwrap module is a bit difficult to tune ... we want
         # to maintain newlines from the original string, but enforce a

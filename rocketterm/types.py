@@ -725,6 +725,13 @@ class RoomMessage:
         return self.m_data.get("tmid", None)
 
     def wasEdited(self):
+        """Returns whether this message has been edited after its initial
+        creation.
+
+        This is not only set for edited message text but also for removed
+        messages (special message type) and for change of file attachment
+        descriptions.
+        """
         return 'editedAt' in self.m_data
 
     def getEditTime(self):

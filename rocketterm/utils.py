@@ -80,9 +80,26 @@ def getMessageEditContext(room_msg):
     editor = room_msg.getEditUser()
     edited_by_self = editor == room_msg.getUserInfo()
 
-    edit_prefix = "[{}edited this message]".format(
-        "" if edited_by_self else room_msg.getEditUser().getUsername() + " "
+    edit_prefix = "[{}edited this message on {}]".format(
+        "" if edited_by_self else room_msg.getEditUser().getUsername() + " ",
+        room_msg.getEditTime().strftime("%x %X")
     )
 
     text = "{}: {}".format(edit_prefix, room_msg.getMessage())
     return text
+
+
+def getMessageRemoveContext(room_msg):
+    import rocketterm.types
+    assert room_msg.wasEdited()
+    assert room_msg.getMessageType() == rocketterm.types.MessageType.MessageRemoved
+
+    remover = room_msg.getEditUser()
+    removed_by_self = remover == room_msg.getUserInfo()
+
+    msg = "[{}removed this message on {}]".format(
+        "" if removed_by_self else room_msg.getEditUser().getUsername() + " ",
+        room_msg.getEditTime().strftime("%x %X")
+    )
+
+    return msg
