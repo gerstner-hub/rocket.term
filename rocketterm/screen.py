@@ -604,6 +604,22 @@ class Screen:
             )
 
             return "[{}]".format(event)
+        elif _type == MessageType.MessagePinned:
+            uinfo = msg.getUserInfo()
+            actor = uinfo.getFriendlyName()
+            info = msg.getPinnedMessageInfo()
+
+            if info:
+                event = "{} has pinned message from {} on {}: {}".format(
+                    actor,
+                    info.getAuthorName(),
+                    info.getPinningTime().strftime("%X %x"),
+                    info.getPinnedText()
+                )
+            else:
+                event = "{} has pinned a message (don't know which one)".format(actor)
+
+            return "[{}]".format(event)
         else:
             return "unsupported special message type {}: {}".format(str(_type), raw_message)
 

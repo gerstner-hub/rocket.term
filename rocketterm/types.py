@@ -570,6 +570,25 @@ class URLInfo:
         return self.m_data["url"]
 
 
+class PinnedInfo:
+    """Information about a message that got pinned."""
+
+    def __init__(self, attachment):
+        self.m_pinned_data = attachment
+
+    def getAuthorName(self):
+        return self.m_pinned_data.get("author_name", "unknown")
+
+    def getPinnedText(self):
+        return self.m_pinned_data.get("text", "")
+
+    def getPinningTime(self):
+        if "ts" in self.m_pinned_data:
+            return rcTimeToDatetime(self.m_pinned_data["ts"]["$date"])
+        else:
+            return None
+
+
 class FileInfo:
     """Information about file attachments that can be part of RC chat
     messages."""
@@ -618,7 +637,7 @@ class MessageType(Enum):
     RoomArchived = "room-archived"
     RoomUnarchived = "room-unarchived"
     RegularMessage = "normal-message"
-    MessagePinned = "message-pinned"
+    MessagePinned = "message_pinned"
     DiscussionCreated = "discussion-created"
     NewLeader = "new-leader"
     LeaderRemoved = "leader-removed"
@@ -782,6 +801,24 @@ class RoomMessage:
             ':coffee': {'usernames': ['user1', 'user2']}
         }."""
         return self.m_data.get("reactions", {})
+
+    def getPinnedMessageInfo(self):
+        if not self.getMessageType() == MessageType.MessagePinned:
+            raise Exception("wrong message type")
+
+        req_keys = ("author_name", "text", "ts")
+
+        for attachment in self.m_data.get("attachments", []):
+            matches = True
+            for req in req_keys:
+                if req not in attachment:
+                    matches = False
+                    break
+
+            if matches:
+                return PinnedInfo(attachment)
+
+        return None
 
 
 class EmojiInfo:
