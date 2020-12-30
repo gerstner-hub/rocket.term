@@ -3,7 +3,6 @@
 from enum import Enum
 import os
 import logging
-import textwrap
 
 import urwid
 
@@ -793,6 +792,36 @@ class Screen:
     def _getMaxMsgNrWidth(self):
         return len(str(self.m_room_msg_count + 1))
 
+    def _wrapText(self, text, width, indent_len):
+        import textwrap
+
+        # the textwrap module is a bit difficult to tune ... we want to
+        # maintain newlines from the original string, but enforce a maximum
+        # line length while prefixing an indentation string to each line
+        # starting from the second one.
+        #
+        # maintaining the original newlines works via `replace_whitespace =
+        # False`, however then we don't get these lines split up in the
+        # result, also existing newlines aren't resetting the line length
+        # calculation, causing early linebreaks to be inserted.
+        #
+        # therefore explicitly split existing newlines to keep them, then
+        # process each line with textwrap.
+
+        indent = (' ' * indent_len)
+
+        orig_lines = text.split('\n')
+        lines = []
+
+        for line in orig_lines:
+            add = textwrap.wrap(line, width=width, replace_whitespace=False)
+            lines.extend(add)
+
+        if len(lines) > 1:
+            lines = lines[0:1] + [indent + line for line in lines[1:]]
+
+        return '\n'.join(lines)
+
     def _formatChatMessage(self, msg, nr):
         """Returns an urwid widget representing the fully formatted chat
         message.
@@ -809,7 +838,6 @@ class Screen:
 
         prefix_len = len(nr_label) + len(timestamp) + len(userprefix) + len(thread_id)
         messagewidth = max(self.m_chat_box.getNumCols(), 80) - prefix_len - 1
-        indentation = (' ' * prefix_len)
 
         if msg.isIncrementalUpdate():
             msg_text = self._getUpdateText(msg, nr)
@@ -817,29 +845,7 @@ class Screen:
             # handle special message types by creating sensible text to display
             msg_text = self._getMessageText(msg)
 
-        # the textwrap module is a bit difficult to tune ... we want
-        # to maintain newlines from the original string, but enforce a
-        # maximum line length while prefixing an indentation string to
-        # each line starting from the second one.
-        #
-        # maintaining the original newlines works via
-        # `replace_whitespace = False`, however then we don't get the lines
-        # split up in the result, when there are newlines contained in the
-        # original text. Therefore replace remaining newlines by the prefix
-        # afterwards.
-
-        lines = textwrap.wrap(
-            msg_text,
-            width=messagewidth,
-            replace_whitespace=False
-        )
-
-        if len(lines) > 1:
-            lines = lines[0:1] + [indentation + line for line in lines[1:]]
-
-        lines = [line.replace('\n', '\n' + indentation) for line in lines]
-
-        message = '\n'.join(lines)
+        message = self._wrapText(msg_text, messagewidth, prefix_len)
 
         user_color = self._getUserColor(username)
 
