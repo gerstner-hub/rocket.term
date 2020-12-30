@@ -10,6 +10,7 @@ import urwid
 import rocketterm.controller
 import rocketterm.types
 import rocketterm.parser
+import rocketterm.utils
 from rocketterm.widgets import CommandInput, SizedListBox
 
 ScrollDirection = Enum('ScrollDirection', "OLDER NEWER NEWEST OLDEST")
@@ -497,13 +498,9 @@ class Screen:
 
         return " #{} ".format(str(parent_nr).rjust(max_width))
 
-    def _getUpdateText(self, msg, nr):
-        # TODO: currently the controller handles the text for updated message
-        # which is a bit inconsistent ... either all message text should be
-        # built in the Controller or all should be built in the Screen.
-        #
-        # only add the original message nr# as a prefix here and handle
-        # resolving of yet unknown message IDs.
+    def _getUpdateMessagePrefix(self, msg, nr):
+        # add the original message nr# as a prefix here and handle resolving
+        # of yet unknown message IDs.
         nrs = self.m_msg_nr_map.get(msg.getID())
         if nrs:
             label = "[#{}]".format(nrs[0])
@@ -514,7 +511,94 @@ class Screen:
             waiters.append((nr, msg))
 
         prefix = "{}: ".format(label)
-        return prefix + msg.getMessage()
+        return prefix
+
+    def _getUpdateText(self, new_msg, nr):
+        """Calculate an incremental message update message when an existing chat
+        message is altered.
+
+        This happens e.g. when reactions are added to messages, new thread
+        messages appear or message text is edited etc. Try to filter out
+        useless updates, otherwise try to make clear what happened by changing
+        message content.
+
+        The handling is quite complex, because the data structures provided
+        by stream-room-messages make it hard to understand what is going on,
+        because no diffs are sent, only the complete new message, and
+        sometimes intermediate states.
+        """
+        # we could also simply update the original message. this would be
+        # easier on the implementation side. on the other hand this is kind of
+        # a feature to see when happens what and what are the newest
+        # modifications without having to scroll back. Although this data
+        # cannot be reconstructed currently from server data after the events
+        # are gone. So it is only ephemeral data and once the program is
+        # restarted only a single message will appear anymore.
+        assert new_msg.isIncrementalUpdate()
+
+        prefix = self._getUpdateMessagePrefix(new_msg, nr)
+        text = self._formatUpdateMessage(new_msg)
+
+        return prefix + text
+
+    def _formatUpdateMessage(self, new_msg):
+        old_msg = new_msg.getOldMessage()
+
+        if not old_msg:
+            return "update of uncached message -> unable to determine what changed"
+        elif new_msg.getMessageType() != old_msg.getMessageType():
+            MessageType = rocketterm.types.MessageType
+            if new_msg.getMessageType() == MessageType.MessageRemoved:
+                return rocketterm.utils.getMessageRemoveContext(new_msg)
+            else:
+                self.m_logger.warning("unhandled message type change. old = {}, new = {}".format(
+                    old_msg.getRaw(), new_msg.getRaw()
+                ))
+                return "unknown message type change"
+        elif new_msg.wasEdited() and new_msg.getEditTime() != old_msg.getEditTime():
+            return rocketterm.utils.getMessageEditContext(new_msg)
+        elif old_msg.getReactions() != new_msg.getReactions():
+            return self._getChangedReactionsText(old_msg, new_msg)
+
+        self.m_logger.warning(
+            "unhandled message update. old = {}, new = {}".format(
+                old_msg.getRaw(), new_msg.getRaw()
+            )
+        )
+
+        return "unable to deduce what changed in this message update"
+
+    def _getChangedReactionsText(self, old_msg, new_msg):
+
+        old_reactions = old_msg.getReactions()
+        new_reactions = new_msg.getReactions()
+        new_text = []
+
+        user_prefix = rocketterm.types.BasicUserInfo.typePrefix()
+
+        for reaction, info in new_reactions.items():
+            old_info = old_reactions.get(reaction, {'usernames': []})
+            old_users = old_info.get('usernames')
+            new_users = info['usernames']
+
+            for user in new_users:
+                if user not in old_users:
+                    new_text.append(
+                        "{}{} reacted with {}".format(user_prefix, user, reaction)
+                    )
+
+        for reaction, info in old_reactions.items():
+            new_info = new_reactions.get(reaction, {'usernames': []})
+            new_users = new_info.get('usernames')
+            old_users = info['usernames']
+
+            for user in old_users:
+                if user not in new_users:
+                    new_text.append(
+                        "{}{} removed {} reaction".format(user_prefix, user, reaction)
+                    )
+
+        return '\n'.join(new_text)
 
     def _getMessageText(self, msg):
         """Transforms the message's text into a sensible message, if it is a
@@ -551,16 +635,11 @@ class Screen:
             if msg.hasFile():
                 fi = msg.getFile()
                 desc = fi.getDescription()
-                attach_prefix = "[file attachment: {} ({})]{}".format(
+                text += "\n[file attachment: {} ({})]{}".format(
                     fi.getName(),
                     fi.getMIMEType(),
                     ": {}".format(desc) if desc else ""
                 )
-
-                if text:
-                    attach_prefix += ": "
-
-                text = attach_prefix + (text if text else "")
 
             return text
         elif _type in (MessageType.UserLeft, MessageType.UserJoined):
@@ -716,10 +795,10 @@ class Screen:
 
     def _formatChatMessage(self, msg, nr):
         """Returns an urwid widget representing the fully formatted chat
-        messsage.
+        message.
 
         :param RoomMessage msg: The message to format.
-        :param int nr: The consecutive msg nr. for the message.
+        :param int nr: The consecutive msg nr# for the message.
         """
 
         nr_label = '#{} '.format(str(nr).rjust(self._getMaxMsgNrWidth()))
@@ -795,6 +874,7 @@ class Screen:
         # so that we can reference it later on if threaded messages occur
         self._recordMsgNr(msg_nr, msg, at_end)
         self.m_num_chat_msgs += 1
+
         # update not yet resolved thread child numbers we may now be able to
         # resolve with this new message
         self._checkUpdateMsgReferences(msg_nr, msg)

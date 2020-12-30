@@ -80,13 +80,16 @@ def getMessageEditContext(room_msg):
     editor = room_msg.getEditUser()
     edited_by_self = editor == room_msg.getUserInfo()
 
-    edit_prefix = "[{}edited this message on {}]".format(
-        "" if edited_by_self else room_msg.getEditUser().getUsername() + " ",
+    edit_prefix = "[message was edited {}on {}]".format(
+        "" if edited_by_self else "by {} ".format(room_msg.getEditUser().getUsername()),
         room_msg.getEditTime().strftime("%x %X")
     )
 
-    text = "{}: {}".format(edit_prefix, room_msg.getMessage())
-    return text
+    msg = room_msg.getMessage()
+    if msg:
+        return "{}: {}".format(edit_prefix, msg)
+    else:
+        return edit_prefix
 
 
 def getMessageRemoveContext(room_msg):
@@ -97,8 +100,8 @@ def getMessageRemoveContext(room_msg):
     remover = room_msg.getEditUser()
     removed_by_self = remover == room_msg.getUserInfo()
 
-    msg = "[{}removed this message on {}]".format(
-        "" if removed_by_self else room_msg.getEditUser().getUsername() + " ",
+    msg = "[message was removed {}on {}]".format(
+        "" if removed_by_self else "by {} ".format(room_msg.getEditUser().getUsername()),
         room_msg.getEditTime().strftime("%x %X")
     )
 

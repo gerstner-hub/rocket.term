@@ -677,17 +677,22 @@ class RoomMessage:
         return RoomMessage(data)
 
     def isIncrementalUpdate(self):
-        """An incremental update is just an addition/removal for an already
+        """An incremental update indicates an addition/removal for an already
         existing message.
 
-        This does not include message edits, which have their own message
-        type. Instead it is for RegularMessage type and can contain e.g. for
-        reactions added/removed.
+        If True is returned then the previous contents of the message can be
+        obtained via getOldMessage().
         """
         return self.m_data.get("incupdate", False)
 
-    def setIsIncrementalUpdate(self, val):
-        self.m_data["incupdate"] = val
+    def getOldMessage(self):
+        """For incremental update messages this returns the original message
+        before the update occured."""
+        return self.m_data.get("old_msg", None)
+
+    def setIsIncrementalUpdate(self, old_msg):
+        self.m_data["incupdate"] = True
+        self.m_data["old_msg"] = old_msg
 
     def getRaw(self):
         return self.m_data

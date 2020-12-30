@@ -5,9 +5,6 @@ import functools
 import logging
 import threading
 
-# rocket.term
-import rocketterm.types
-
 
 class Controller:
     """The Controller holds the non-graphical program state and offers an
@@ -680,7 +677,7 @@ class Controller:
 
         return msg.getClientTimestamp() <= newest.getClientTimestamp()
 
-    def _ignoreMessageUpdate(self, room_msgs, msg):
+    def _ignoreMessageUpdate(self, room_msgs, old_msg, new_msg):
         """Returns a boolean whether the given updated RoomMessage should be
         ignored from processing."""
 
@@ -690,7 +687,14 @@ class Controller:
         # This happens e.g. when new reactions are added, then multiple
         # notifications go out, the first one will not have an updated
         # timestamp.
-        return msg.getServerTimestamp() <= newest.getServerTimestamp()
+        if new_msg.getServerTimestamp() <= newest.getServerTimestamp():
+            return True
+        elif old_msg and old_msg.getNumReplies() != new_msg.getNumReplies():
+            # a thread was opened or altered, ignore (we could make a "thread
+            # activity callback" out of this somewhen)
+            return True
+
+        return False
 
     def _newRoomMessage(self, collection, event, msg):
         """Callback for handling new room message events.
@@ -710,122 +714,21 @@ class Controller:
                 # ignore this, it's some garbage update the server sent
                 return
 
-        is_update = self._isMessageUpdate(messages, msg)
+        if self._isMessageUpdate(messages, msg):
+            if self._ignoreMessageUpdate(messages, orig_msg, msg):
+                return
 
-        if is_update and self._ignoreMessageUpdate(messages, msg):
-            return
+            msg_to_add = copy.deepcopy(msg)
+            msg_to_add.setIsIncrementalUpdate(orig_msg)
+        else:
+            msg_to_add = msg
 
         # opportunistically cache new info
         self._cacheMessage(room, msg)
 
-        msg_to_add = msg
-
-        if is_update:
-            if orig_msg:
-                msg_to_add = self._getUpdateMessage(orig_msg, msg)
-            else:
-                # this is an update for an old message that we didn't cache
-                # yet. in this case we can't calculate differences
-                msg_to_add = copy.deepcopy(msg)
-                msg_to_add.setMessage("message was updated (unable to deduce exactly what)")
-                msg_to_add.setIsIncrementalUpdate(True)
-
-        if not msg_to_add:
-            # ignore the update
-            return
-
         messages[0:0] = [msg_to_add]
         self.m_room_msg_count[room.getID()] += 1
         self.m_callbacks.handleNewRoomMessage(msg_to_add)
-
-    def _getUpdateMessage(self, old_msg, new_msg):
-        """Calculate an incremental message update message when existing chat
-        message are altered.
-
-        This happens e.g. when reactions are added to messages, new thread
-        messages appear or message text is edited etc. Try to filter out
-        useless updates, otherwise try to make clear what happened by changing
-        message content.
-
-        The handling is quite complex, because the data structures provided
-        by stream-room-messages make it hard to understand what is going on.
-        It seems to be the case that upon a message update first the previous
-        state of the message is sent (again, seemingly unmotivated) and then
-        the new state of the message.
-        """
-
-        # we could also simply update the original message. this would
-        # be easier on the implementation side. on the other hand this
-        # is kind of a feature to see when reactions happen. Although
-        # this data cannot be reconstructed currently from server data
-        # after the events are gone. So it is only ephemeral data and
-        # once the program is restarted only a single message will
-        # appear anymore.
-
-        ret = copy.deepcopy(new_msg)
-        ret.setIsIncrementalUpdate(True)
-
-        # this is no special message type, we need to look for an 'editedAt'
-        # attribute
-        if new_msg.getMessageType() != old_msg.getMessageType():
-            MessageType = rocketterm.types.MessageType
-            if new_msg.getMessageType() == MessageType.MessageRemoved:
-                text = rocketterm.utils.getMessageRemoveContext(new_msg)
-                ret.setMessage(text)
-            else:
-                self.m_logger.warning("unhandled messge type change. old = {}, new = {}".format(
-                    old_msg.getRaw(), new_msg.getRaw()
-                ))
-                ret.setMessage("unknown message type change")
-        elif new_msg.wasEdited() and new_msg.getEditTime() != old_msg.getEditTime():
-            text = rocketterm.utils.getMessageEditContext(new_msg)
-            ret.setMessage(text)
-        elif new_msg.getNumReplies() != old_msg.getNumReplies():
-            # a thread was opened or altered, ignore
-            # (we could make a "thread activity callback" out of this somewhen)
-            return None
-        elif old_msg.getReactions() != new_msg.getReactions():
-            self._handleChangedReactions(old_msg, ret)
-        else:
-            self.m_logger.warning("unhandled message update. old = {}, new = {}".format(
-                old_msg.getRaw(), new_msg.getRaw()))
-            return None
-
-        return ret
-
-    def _handleChangedReactions(self, old_msg, new_msg):
-
-        old_reactions = old_msg.getReactions()
-        new_reactions = new_msg.getReactions()
-        new_text = []
-
-        user_prefix = rocketterm.types.BasicUserInfo.typePrefix()
-
-        for reaction, info in new_reactions.items():
-
-            old_info = old_reactions.get(reaction, {'usernames': []})
-            old_users = old_info.get('usernames')
-            new_users = info['usernames']
-
-            for user in new_users:
-                if user not in old_users:
-                    new_text.append(
-                        "{}{} reacted with {}".format(user_prefix, user, reaction)
-                    )
-
-        for reaction, info in old_reactions.items():
-
-            new_info = new_reactions.get(reaction, {'usernames': []})
-            new_users = new_info.get('usernames')
-            old_users = info['usernames']
-
-            for user in old_users:
-                if user not in new_users:
-                    new_text.append(
-                        "{}{} removed {} reaction".format(user_prefix, user, reaction)
-                    )
-
-        new_msg.setMessage('\n'.join(new_text))
 
     def _subscriptionEvent(self, collection, change_type, event, data):
         """Called when something related to the user's subscriptions changes
