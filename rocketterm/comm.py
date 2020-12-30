@@ -408,6 +408,22 @@ class RocketComm:
         """
         self.m_rt_session.sendMessage(room.getID(), msg, thread_id)
 
+    def updateMessage(self, msg, new_text):
+        """Updates the text of an existing chat message.
+
+        :param RoomMessage msg: The RoomMessage object of the message whoose
+        text should be changed.
+        :param str new_text: The new message text to set for the message.
+        """
+        import copy
+        new_msg = copy.deepcopy(msg)
+        new_msg.setMessage(new_text)
+
+        # NOTE: it seems we need to supply the full message object with
+        # changed text, just passing '_id' and 'msg' causes an internal server
+        # error.
+        self.m_rt_session.updateMessage(new_msg.getRaw())
+
     def deleteMessage(self, msg):
         """Delete the message represented by the given RoomMessage object."""
         self.m_rt_session.deleteMessage(msg.getID())

@@ -12,6 +12,7 @@ class Command(Enum):
     """All supported commands and their text labels."""
     SendMessage = "send"
     DeleteMessage = "delmsg"
+    EditMessage = "editmsg"
     RepeatMessage = "repeat"
     ReplyInThread = "reply"
     HideRoom = "hide"
@@ -42,6 +43,7 @@ class Command(Enum):
 USAGE = {
     Command.SendMessage: "[/{}] text...: creates a new message with the given text in the currently selected room",
     Command.DeleteMessage: "/{} #MSGSPEC: deletes the given message from the currently selected room.",
+    Command.EditMessage: "/{} #MSGSPEC text...: edits the text of an existing message in the currently selected room.",
     Command.RepeatMessage: "/{} COUNT text: repeatedly send a message. "
                            "The optional placeholder {MSGNUM} in the text will be replaced by the iterator count.",
     Command.ReplyInThread: "/{} #MSGSPEC text...: replies to another message or thread in the currently selected room",
@@ -619,6 +621,21 @@ class Parser:
         self.m_comm.deleteMessage(self.m_controller.getMessageFromID(msg_id))
 
         return "Deleted message #{}".format(msg_nr)
+
+    def _handleEditmsg(self, args):
+        if len(args) != 2:
+            return "Expected two arguments: #msgnr TEXT. Example: /editmsg #811 'new message text'"
+
+        msg_nr = self._processMsgNrArg(args[0])
+        try:
+            msg_id = self.m_screen.getMsgIDForNr(msg_nr)
+        except Exception:
+            return "Error: message #{} not yet cached".format(msg_nr)
+
+        self.m_comm.updateMessage(
+            self.m_controller.getMessageFromID(msg_id),
+            args[1]
+        )
 
     def _handleRepeat(self, args):
         if len(args) != 2:

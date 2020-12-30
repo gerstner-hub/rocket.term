@@ -521,6 +521,15 @@ class RealtimeSession:
         )
         return self.methodCall("sendMessage", msg.getRaw())
 
+    def updateMessage(self, msg):
+        """Updates an existing chat message with new data like the message
+        text.
+
+        :param dict msg: The raw message data structure that needs at least a
+        valid message _id
+        """
+        return self.methodCall("updateMessage", msg)
+
     def deleteMessage(self, msg_id):
         """Delete the chat message with the given ID."""
 
