@@ -546,9 +546,11 @@ class Screen:
 
             if msg.hasFile():
                 fi = msg.getFile()
-                attach_prefix = "[file attachment: {} ({})]".format(
+                desc = fi.getDescription()
+                attach_prefix = "[file attachment: {} ({})]{}".format(
                     fi.getName(),
-                    fi.getMIMEType()
+                    fi.getMIMEType(),
+                    ": {}".format(desc) if desc else ""
                 )
 
                 if text:

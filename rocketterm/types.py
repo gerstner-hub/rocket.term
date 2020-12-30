@@ -574,17 +574,24 @@ class FileInfo:
     """Information about file attachments that can be part of RC chat
     messages."""
 
-    def __init__(self, data):
-        self.m_data = data
+    def __init__(self, file_data, attachment):
+        self.m_file_data = file_data
+        self.m_attachment = attachment
 
     def getID(self):
-        return self.m_data['_id']
+        return self.m_file_data['_id']
 
     def getName(self):
-        return self.m_data['name']
+        return self.m_file_data['name']
 
     def getMIMEType(self):
-        return self.m_data['type']
+        return self.m_file_data['type']
+
+    def getDescription(self):
+        return self.m_attachment.get("description", "")
+
+    def getSubURL(self):
+        return self.m_attachment.get("title_link", None)
 
 
 class MessageType(Enum):
@@ -760,7 +767,15 @@ class RoomMessage:
         if not self.hasFile():
             return None
 
-        return FileInfo(self.m_data['file'])
+        for attachment in self.m_data.get("attachments", []):
+            if attachment["type"] != "file":
+                continue
+            elif attachment["title"] == self.m_data["file"]["name"]:
+                break
+        else:
+            attachment = {}
+
+        return FileInfo(self.m_data['file'], attachment)
 
     def getReactions(self):
         """Returns a dictionary like: {
