@@ -505,6 +505,12 @@ class Parser:
 
         return room, label
 
+    def _resolveMsgNr(self, msg_nr):
+        try:
+            return self.m_screen.getMsgIDForNr(msg_nr)
+        except Exception:
+            raise Exception("Error: message #{} not yet cached".format(msg_nr))
+
     def _handleHide(self, args):
         room, room_label = self._getOptionalRoomArg(args)
 
@@ -613,10 +619,7 @@ class Parser:
             return "Expected exactly one argument: #msgnr. Example /delmsg #811"
 
         msg_nr = self._processMsgNrArg(args[0])
-        try:
-            msg_id = self.m_screen.getMsgIDForNr(msg_nr)
-        except Exception:
-            return "Error: message #{} not yet cached".format(msg_nr)
+        msg_id = self._resolveMsgNr(msg_nr)
 
         self.m_comm.deleteMessage(self.m_controller.getMessageFromID(msg_id))
 
@@ -627,10 +630,7 @@ class Parser:
             return "Expected two arguments: #msgnr TEXT. Example: /editmsg #811 'new message text'"
 
         msg_nr = self._processMsgNrArg(args[0])
-        try:
-            msg_id = self.m_screen.getMsgIDForNr(msg_nr)
-        except Exception:
-            return "Error: message #{} not yet cached".format(msg_nr)
+        msg_id = self._resolveMsgNr(msg_nr)
 
         self.m_comm.updateMessage(
             self.m_controller.getMessageFromID(msg_id),
@@ -695,10 +695,7 @@ class Parser:
             return "Invalid number of arguments: Example: /reply #5 'my reply text'"
 
         thread_nr = self._processMsgNrArg(args[0])
-        try:
-            root_id = self.m_screen.getMsgIDForNr(thread_nr)
-        except Exception:
-            return "Error: thread #{} not yet cached".format(thread_nr)
+        root_id = self._resolveMsgNr(thread_nr)
 
         self.m_comm.sendMessage(
             self.m_controller.getSelectedRoom(),
@@ -784,7 +781,7 @@ class Parser:
             return "invalid number of arguments. Example: /react #432 :crying:"
 
         msg_nr = self._processMsgNrArg(args[0])
-        msg_id = self.m_screen.getMsgIDForNr(msg_nr)
+        msg_id = self._resolveMsgNr(msg_nr)
 
         emoji = args[1]
 
