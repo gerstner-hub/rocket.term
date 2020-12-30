@@ -224,6 +224,7 @@ keyboard controls available:
 | `Shift+Arrow-up`/`Shift+Arrow-down`| This will select the previous / next room with activity, if any. Rooms with activity are shown in different color in the room list. This allows you to quickly walk through rooms with recent changes.|
 | `Meta+Arrow-up`/`Meta+Arrow-down`  | This will select the previous / next room in the room list. |
 | `Meta+q` | Quits the application. |
+| `Ctrl+v` | Allows to enter raw control sequences like newlines and tabs. |
 
 The `Meta` key mapping depends on the terminal you use but it is typically the
 `Alt` or `Control` key.

@@ -36,6 +36,7 @@ class CommandInput(urwid.Edit):
         # via selectNewerHistoryEntry() later on, without having to actually
         # submit the command.
         self.m_pending_cmd = ""
+        self.m_next_input_verbatim = False
 
     def addPrompt(self, text):
         """Prepends text to the command input prompt."""
@@ -50,6 +51,12 @@ class CommandInput(urwid.Edit):
         the cursor accordingly."""
         self.set_edit_text(line)
         self.set_edit_pos(len(line))
+
+    def _addText(self, to_add):
+        current = self.text[len(self.caption):]
+        new = current + to_add
+        self.set_edit_text(new)
+        self.set_edit_pos(len(new))
 
     def _getCommandLine(self):
         """Returns the net command line input from the input box."""
@@ -98,11 +105,20 @@ class CommandInput(urwid.Edit):
 
     def keypress(self, size, key):
 
+        if self.m_logger.isEnabledFor(logging.DEBUG):
+            self.m_logger.debug("key event: {}".format(key))
+
+        if self.m_next_input_verbatim:
+            return self._handleVerbatimKey(key)
+
         # first let the EditBox handle the event to e.g. move the cursor
         # around or add new characters.
         if super().keypress(size, key) is None:
             return None
 
+        return self._handleRegularKey(key)
+
+    def _handleRegularKey(self, key):
         command = self._getCommandLine()
 
         if key == 'enter':
@@ -122,8 +138,21 @@ class CommandInput(urwid.Edit):
         elif key == 'down':
             self._selectNewerHistoryEntry()
             return None
+        elif key == 'ctrl v':
+            self.m_next_input_verbatim = True
 
         return key
+
+    def _handleVerbatimKey(self, key):
+
+        self.m_next_input_verbatim = False
+
+        if key == 'enter':
+            self._addText("\n")
+        elif key == 'tab':
+            self._addText("\t")
+
+        return None
 
 
 class SizedListBox(urwid.ListBox):
