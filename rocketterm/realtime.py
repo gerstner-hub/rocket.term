@@ -521,6 +521,15 @@ class RealtimeSession:
         )
         return self.methodCall("sendMessage", msg.getRaw())
 
+    def deleteMessage(self, msg_id):
+        """Delete the chat message with the given ID."""
+
+        params = {
+            "_id": msg_id
+        }
+
+        return self.methodCall("deleteMessage", params)
+
     def getJoinedRooms(self, changes_since_ts=0):
         """Returns a sequence of data structures representing the
         different rooms the logged in user is a member of.

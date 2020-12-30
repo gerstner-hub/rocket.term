@@ -408,6 +408,10 @@ class RocketComm:
         """
         self.m_rt_session.sendMessage(room.getID(), msg, thread_id)
 
+    def deleteMessage(self, msg):
+        """Delete the message represented by the given RoomMessage object."""
+        self.m_rt_session.deleteMessage(msg.getID())
+
     def getUserInfoByID(self, uid):
         """Retrieves a UserInfo structure for the given user ID from the
         server."""
