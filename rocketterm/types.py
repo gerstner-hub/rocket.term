@@ -322,6 +322,9 @@ class BasicUserInfo:
     def getUsername(self):
         return self.m_data["username"]
 
+    def getLabel(self):
+        return self.typePrefix() + self.getUsername()
+
     def getFriendlyName(self):
         try:
             return self.m_data["name"]
@@ -819,6 +822,12 @@ class RoomMessage:
                 return PinnedInfo(attachment)
 
         return None
+
+    def getStars(self):
+        """Returns a list of user IDs that starred this message."""
+        starrers = self.m_data.get("starred", [])
+
+        return [starrer['_id'] for starrer in starrers]
 
 
 class EmojiInfo:

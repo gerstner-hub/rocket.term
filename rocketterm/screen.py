@@ -544,6 +544,10 @@ class Screen:
                     reaction, ', '.join(prefixed_users)
                 )
 
+            for starrer in msg.getStars():
+                info = self.m_controller.getBasicUserInfoByID(starrer)
+                text += "\n[{} starred this message]".format(info.getLabel())
+
             if msg.hasFile():
                 fi = msg.getFile()
                 desc = fi.getDescription()
