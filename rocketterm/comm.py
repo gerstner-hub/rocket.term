@@ -612,3 +612,9 @@ class RocketComm:
 
     def delReaction(self, msg, reaction):
         self.m_rt_session.setReaction(msg.getID(), reaction, False)
+
+    def setMessageStar(self, msg):
+        self.m_rt_session.starMessage(msg.getID(), msg.getRoomID(), True)
+
+    def delMessageStar(self, msg):
+        self.m_rt_session.starMessage(msg.getID(), msg.getRoomID(), False)

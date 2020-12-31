@@ -678,3 +678,20 @@ class RealtimeSession:
         """
 
         return self.methodCall("setReaction", [reaction, msg_id, add])
+
+    def starMessage(self, msg_id, room_id, star_it=True):
+        """Adds or removes a message star.
+
+        From RC docs:
+
+        Starring allows a user to quickly save for future reference, or
+        something similar, for their own personal usage.
+        """
+
+        args = {
+            "_id": msg_id,
+            "rid": room_id,
+            "starred": star_it
+        }
+
+        return self.methodCall("starMessage", [args])

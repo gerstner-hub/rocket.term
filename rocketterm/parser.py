@@ -37,6 +37,8 @@ class Command(Enum):
     SetLogLevel = "setloglevel"
     AddLogfile = "addlogfile"
     SetReaction = "react"
+    SetStar = "star"
+    DelStar = "unstar"
 
 
 # the first format placeholder will receive the actual command name
@@ -69,7 +71,9 @@ USAGE = {
     Command.SetDefaultLogLevel: "/{} LOGLEVEL: adjusts the default Python loglevel.",
     Command.SetLogLevel: "/{} LOGGER=LOGLEVEL: adjusts the logleven of the given Python logger.",
     Command.AddLogfile: "/{} PATH: adds a logfile path to output Python logging to.",
-    Command.SetReaction: "/{} #MSGSPEC [+|-]EMOJI: add or removes a reaction to/from a message."
+    Command.SetReaction: "/{} #MSGSPEC [+|-]EMOJI: add or removes a reaction to/from a message.",
+    Command.SetStar: "/{} #MSGSPEC: stars a message for later reference.",
+    Command.DelStar: "/{} #MSGSPEC: removes a star previously added to a message."
 }
 
 HIDDEN_COMMANDS = set([
@@ -511,6 +515,11 @@ class Parser:
         except Exception:
             raise Exception("Error: message #{} not yet cached".format(msg_nr))
 
+    def _getMsgObjFromNr(self, msg_nr_arg):
+        msg_nr = self._processMsgNrArg(msg_nr_arg)
+        msg_id = self._resolveMsgNr(msg_nr)
+        return self.m_controller.getMessageFromID(msg_id)
+
     def _handleHide(self, args):
         room, room_label = self._getOptionalRoomArg(args)
 
@@ -803,6 +812,22 @@ class Parser:
         else:
             self.m_comm.delReaction(msg, emoji)
             return "Removed reaction {} from {}".format(emoji, args[0])
+
+    def _handleStar(self, args):
+        if len(args) != 1:
+            return "invalid number of arguments. expected only #MSGSPEC."
+
+        msg = self._getMsgObjFromNr(args[0])
+        self.m_comm.setMessageStar(msg)
+        return "starred message {}".format(args[0])
+
+    def _handleUnstar(self, args):
+        if len(args) != 1:
+            return "invalid number of arguments. expected only #MSGSPEC."
+
+        msg = self._getMsgObjFromNr(args[0])
+        self.m_comm.delMessageStar(msg)
+        return "unstarred message {}".format(args[0])
 
     def _handleDiscussions(self, args):
         if len(args) != 0:

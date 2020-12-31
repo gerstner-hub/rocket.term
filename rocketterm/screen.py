@@ -580,6 +580,8 @@ class Screen:
             return rocketterm.utils.getMessageEditContext(new_msg)
         elif old_msg.getReactions() != new_msg.getReactions():
             return self._getChangedReactionsText(old_msg, new_msg)
+        elif old_msg.getStars() != new_msg.getStars():
+            return self._getChangedStarsText(old_msg, new_msg)
 
         self.m_logger.warning(
             "unhandled message update. old = {}, new = {}".format(
@@ -589,11 +591,33 @@ class Screen:
 
         return "unable to deduce what changed in this message update"
 
+    def _getChangedStarsText(self, old_msg, new_msg):
+
+        old_stars = old_msg.getStars()
+        new_stars = new_msg.getStars()
+        changes = []
+
+        for uid in old_stars:
+            if uid not in new_stars:
+                info = self.m_controller.getBasicUserInfoByID(uid)
+                changes.append(
+                    "{} unstarred this message".format(info.getUsername())
+                )
+
+        for uid in new_stars:
+            if uid not in old_stars:
+                info = self.m_controller.getBasicUserInfoByID(uid)
+                changes.append(
+                    "{} starred this message".format(info.getUsername())
+                )
+
+        return '\n'.join(changes)
+
     def _getChangedReactionsText(self, old_msg, new_msg):
 
         old_reactions = old_msg.getReactions()
         new_reactions = new_msg.getReactions()
-        new_text = []
+        changes = []
 
         user_prefix = rocketterm.types.BasicUserInfo.typePrefix()
 
@@ -604,7 +628,7 @@ class Screen:
 
             for user in new_users:
                 if user not in old_users:
-                    new_text.append(
+                    changes.append(
                         "{}{} reacted with {}".format(user_prefix, user, reaction)
                     )
 
@@ -615,11 +639,11 @@ class Screen:
 
             for user in old_users:
                 if user not in new_users:
-                    new_text.append(
+                    changes.append(
                         "{}{} removed {} reaction".format(user_prefix, user, reaction)
                     )
 
-        return '\n'.join(new_text)
+        return '\n'.join(changes)
 
     def _getMessageText(self, msg):
         """Transforms the message's text into a sensible message, if it is a
