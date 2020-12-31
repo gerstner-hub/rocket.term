@@ -891,20 +891,109 @@ class Screen:
             # handle special message types by creating sensible text to display
             msg_text = self._getMessageText(msg)
 
-        message = self._wrapText(msg_text, messagewidth, prefix_len)
+        wrapped_text = self._wrapText(msg_text, messagewidth, prefix_len)
 
         user_color = self._getUserColor(username)
         parent_color = self._getMsgNrColor(msg, nr)
 
-        text = urwid.Text([
-            (parent_color, nr_label),
-            ('text', timestamp),
-            (thread_color, thread_id),
-            (urwid.AttrSpec(user_color, 'black'), userprefix),
-            ('text', message)
-        ])
+        text = urwid.Text(
+            [
+                (parent_color, nr_label),
+                ('text', timestamp),
+                (thread_color, thread_id),
+                (urwid.AttrSpec(user_color, 'black'), userprefix),
+            ] + self._getHighlightedTextParts(wrapped_text)
+        )
 
         return text
+
+    def _getHighlightedTextParts(self, text):
+        """Parses the given string for elements to highlight and returns a
+        list of tuples mkaing up the urwid text elements for display.
+
+        This function parses text elements like usernames and emojis and
+        highlights them with suitable colors. Returned is a list of tuples of
+        (urwid attribute, text) that represents the highlighted text.
+        """
+        word_seps = ' \t\n'
+
+        class ParseContext:
+            elements = []
+            cur_element = ""
+            cur_word = ""
+        context = ParseContext()
+
+        def addCurElement(context):
+            if context.cur_element:
+                context.elements.append(('text', context.cur_element))
+                context.cur_element = ""
+
+        def handleWord(context):
+            highlight = self._getHighlightedWord(context.cur_word)
+            if highlight:
+                highlight, rest = highlight
+                addCurElement(context)
+                context.elements.append(highlight)
+                context.cur_element += rest
+            else:
+                context.cur_element += context.cur_word
+
+        for ch in text:
+
+            if ch in word_seps:
+                handleWord(context)
+                context.cur_word = ""
+                context.cur_element += ch
+            else:
+                context.cur_word += ch
+
+        handleWord(context)
+        addCurElement(context)
+
+        return context.elements
+
+    def _getHighlightedWord(self, word):
+        """Returns colored text if the given message word should be
+        highlighted.
+
+        If the given word should not be highlighted then None is returned.
+        Otherwise a tuple of ((color, text), str) is returned. The first tuple
+        element is itself a tuple suitable to add it to an urwid.Text widget.
+        The second element contains any remaining text from word that should
+        be treated as normal text.
+        """
+
+        if len(word) > 1 and word.startswith('@'):
+            # remove any suffix characters that aren't part of the username
+            rest = ""
+            while word and not word[-1].isalpha():
+                rest += word[-1]
+                word = word[:-1]
+            # actively querying uncached usernames here is heavily slowing
+            # down application responsiveness ... therefore simply treat all
+            # valid @<words> as valid usernames. This could mean we also color
+            # non-users but its still way cheaper this way.
+
+            # info = self.m_controller.getBasicUserInfoByName(word[1:], only_cached = True)
+            # if not info:
+            #     return None
+            attr = urwid.AttrSpec(self._getUserColor(word[1:]), 'black')
+            return (attr, word), rest
+        elif len(word) > 2 and word.startswith(':'):
+            # remove any suffix characters that aren't part of the reaction
+            end = word.find(':', 1)
+            if end <= 1:
+                return None
+            rest = word[end+1:]
+            word = word[:end+1]
+            emoji = word[1:-1]
+            # make sure we have custom emoji data available
+            self.m_controller.fetchCustomEmojiData()
+            from rocketterm.emojis import ALL_EMOJIES
+            if emoji in ALL_EMOJIES:
+                return ("activity_text", word), rest
+
+        return None
 
     def _addChatMessage(self, msg, at_end):
         """Adds a chat message to the current chat box.
