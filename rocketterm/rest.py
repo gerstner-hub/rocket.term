@@ -387,3 +387,9 @@ class RestSession:
         )
 
         return resp
+
+    def getInfo(self):
+        """Returns remote server information like the RC server version."""
+
+        resp = self._get("info")
+        return resp["info"]

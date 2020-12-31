@@ -855,3 +855,35 @@ class EmojiInfo:
 
     def getUpdateTime(self):
         return rcTimeToDatetime(self.m_data["_updatedAt"]["$date"])
+
+
+class ServerInfo:
+
+    def __init__(self, data):
+        self.m_data = data
+
+    def getRaw(self):
+        return self.m_data
+
+    def getVersion(self):
+        """Returns a tuple representing the server version number.
+
+        The returned tuple contains a series of integers denoting the major,
+        minor and tiny version number of the remote server.
+        """
+        version = self.m_data.get("version", None)
+
+        if not version:
+            return None
+
+        parts = version.split('.')
+
+        ret = []
+
+        for part in parts:
+            try:
+                ret.append(int(part))
+            except ValueError:
+                break
+
+        return tuple(ret)

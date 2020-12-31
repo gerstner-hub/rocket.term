@@ -39,6 +39,7 @@ class Command(Enum):
     SetReaction = "react"
     SetStar = "star"
     DelStar = "unstar"
+    GetServerInfo = "serverinfo"
 
 
 # the first format placeholder will receive the actual command name
@@ -73,7 +74,8 @@ USAGE = {
     Command.AddLogfile: "/{} PATH: adds a logfile path to output Python logging to.",
     Command.SetReaction: "/{} #MSGSPEC [+|-]EMOJI: add or removes a reaction to/from a message.",
     Command.SetStar: "/{} #MSGSPEC: stars a message for later reference.",
-    Command.DelStar: "/{} #MSGSPEC: removes a star previously added to a message."
+    Command.DelStar: "/{} #MSGSPEC: removes a star previously added to a message.",
+    Command.GetServerInfo: "/{}: retrieves remote server information.",
 }
 
 HIDDEN_COMMANDS = set([
@@ -81,7 +83,8 @@ HIDDEN_COMMANDS = set([
     Command.SetDefaultLogLevel,
     Command.AddLogfile,
     Command.SetLogLevel,
-    Command.RepeatMessage
+    Command.RepeatMessage,
+    Command.GetServerInfo
 ])
 
 
@@ -965,3 +968,12 @@ class Parser:
         self.m_global_objects.log_manager.addLogfile(path)
 
         return "Added logfile output in " + path
+
+    def _handleServerinfo(self, args):
+
+        if len(args) != 0:
+            return "expected no parameters."
+
+        info = self.m_comm.getServerInfo()
+
+        return str(info.getVersion())

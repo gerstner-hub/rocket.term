@@ -618,3 +618,7 @@ class RocketComm:
 
     def delMessageStar(self, msg):
         self.m_rt_session.starMessage(msg.getID(), msg.getRoomID(), False)
+
+    def getServerInfo(self):
+        info = self.m_rest_session.getInfo()
+        return rocketterm.types.ServerInfo(info)

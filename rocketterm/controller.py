@@ -108,6 +108,8 @@ class Controller:
         self.m_user_list_cached = False
         # cached EmojiInfo instances from the server
         self.m_custom_emoji_list = None
+        # an instance of ServerInfo containing remote server version info
+        self.m_server_info = None
         self.m_started = False
 
     def start(self, msg_batch_size):
@@ -130,6 +132,8 @@ class Controller:
         self.m_local_user_info = self.m_comm.getUserInfo(
                 self.m_comm.getLoggedInUserInfo()
         )
+
+        self.m_server_info = self.m_comm.getServerInfo()
 
         # we need to monitor our room memberships and new direct chats
         subscription_callback = functools.partial(
