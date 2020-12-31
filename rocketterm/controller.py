@@ -527,16 +527,16 @@ class Controller:
             self._cacheUserList()
         return self.m_basic_user_infos.values()
 
-    def getUserStatus(self, user):
+    def getUserStatus(self, user, need_text=False):
         """Returns a tuple of (UserPresence, "status text") for the
         given user object."""
         try:
+            if self._getServerNeedsUserStatusEventWorkaround() and need_text:
+                # disable caching if this problem exists
+                raise KeyError
             return self.m_user_status[user.getID()]
         except KeyError:
-            status = self.m_comm.getUserStatus(user)
-            info = (status.getStatus(), status.getMessage())
-            self.m_user_status[user.getID()] = info
-            return info
+            return self._refreshUserStatus(user)
 
     def selectNextRoom(self):
         """Selects the next room from the list of (opened) joined rooms.
@@ -599,14 +599,10 @@ class Controller:
 
     def setUserStatus(self, presence, message):
 
-        # there seems to be some kind of bug that only status message changed
-        # are reported via stream-notify-logged, but not if the status
-        # changes. so actively poll from the REST API then ...
-        # TODO: this would be worth further investigation and maybe creating
-        # an RC upstream issue.
-        # this has been fixed in a newer RC server version already in commit
-        # 287d1dcb376a4613c9c2d6f5b9c22f3699891d2e (version 3.7.0)
         self.m_comm.setUserStatus(presence, message)
+
+        if not self._getServerNeedsSetUserStatusWorkaround():
+            return
 
         our_id = self.m_local_user_info.getID()
         new_status = self.m_comm.getUserStatus(self.m_local_user_info)
@@ -650,6 +646,18 @@ class Controller:
         self.fetchCustomEmojiData()
 
         return rocketterm.emojis.EMOJIS_BY_CATEGORY
+
+    def _getServerNeedsSetUserStatusWorkaround(self):
+        return rocketterm.utils.getServerHasSetUserStatusBug(self.m_server_info)
+
+    def _getServerNeedsUserStatusEventWorkaround(self):
+        return rocketterm.utils.getServerHasBogusUserStatusEventBug(self.m_server_info)
+
+    def _refreshUserStatus(self, user):
+        status = self.m_comm.getUserStatus(user)
+        info = (status.getStatus(), status.getMessage())
+        self.m_user_status[user.getID()] = info
+        return info
 
     def _getRoomToOperateOn(self, room):
         """Helper function to implement the often used logic to operate either

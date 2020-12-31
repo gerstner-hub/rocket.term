@@ -106,3 +106,34 @@ def getMessageRemoveContext(room_msg):
     )
 
     return msg
+
+
+def getServerHasBogusUserStatusEventBug(server_info):
+    # TODO: this is similar to what getServerHasSetUserStatusBug() is about
+    # but I'm not sure yet in which version or in which version of the RC
+    # server this is fixed at all.
+    #
+    # the issue is that upon a user status change two event message are sent
+    # out, one with the correct status message and one with the wrong one.
+    return True
+
+
+def getServerHasSetUserStatusBug(server_info):
+    # there is a bug that only status message changes are reported via
+    # stream-notify-logged, but not if the status changes.
+    #
+    # this has been fixed in a newer RC server version already in commit
+    # 287d1dcb376a4613c9c2d6f5b9c22f3699891d2e (version 3.7.0)
+    version = server_info.getVersion()
+
+    if not version or len(version) < 3:
+        # can't conclude, suppose it has the bug, it's just a performance
+        # issue in the worst case
+        return True
+
+    if version[0] < 3:
+        return True
+    elif version[0] == 3 and version[1] < 7:
+        return True
+    else:
+        return False

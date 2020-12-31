@@ -191,7 +191,8 @@ class Screen:
 
     def _updateMainHeading(self):
         our_status = self.m_controller.getUserStatus(
-                self.m_controller.getLoggedInUserInfo()
+            self.m_controller.getLoggedInUserInfo(),
+            need_text=True
         )
 
         parts = []
@@ -392,7 +393,7 @@ class Screen:
             )
         )
 
-        self.m_chat_frame.contents["header"] = self._getRoomHeading()
+        self._updateRoomHeading()
 
         if not self.m_room_msg_count:
             return
@@ -408,6 +409,9 @@ class Screen:
                 len(self.m_waiting_for_msg_refs)
             )
         )
+
+    def _updateRoomHeading(self):
+        self.m_chat_frame.contents["header"] = self._getRoomHeading()
 
     def _resolveMessageReferences(self):
         # To resolve message references lazily we need to check whether any
@@ -449,7 +453,7 @@ class Screen:
             user_id = room.getPeerUserID(our_info)
             info = self.m_controller.getBasicUserInfoByID(user_id)
             if info:
-                status = self.m_controller.getUserStatus(info)
+                status = self.m_controller.getUserStatus(info, need_text=True)
                 text = "Direct Chat with {} [{}: {}]".format(
                     info.getFriendlyName(),
                     status[0].value,
@@ -1310,11 +1314,18 @@ class Screen:
     def newDirectChatUserStatus(self, status_event):
         """Called by the Controller when the user status for the peers of one
         of our visible direct chats changed."""
-        self.m_logger.debug("direct chat user status changed: {}: {}".format(
+        self.m_logger.debug("direct chat user status changed: {} -> {}, message = {}".format(
             status_event.getUsername(),
-            status_event.getUserPresenceStatus().value)
-        )
+            status_event.getUserPresenceStatus().value,
+            status_event.getStatusText()
+        ))
         self._updateRoomBox()
+
+        if self.m_current_room.isDirectChat():
+            our_info = self.m_controller.getLoggedInUserInfo()
+            if self.m_current_room.getPeerUserID(our_info) == status_event.getUserID():
+                # update the direct chat status
+                self._updateRoomHeading()
 
     def selectThread(self, thread_nr):
         """Selects a new default thread to participate in.
