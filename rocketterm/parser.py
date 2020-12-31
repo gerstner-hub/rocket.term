@@ -456,11 +456,12 @@ class Parser:
 
     def _resolveUsername(self, username):
         try:
-            return self.m_controller.getBasicUserInfoByName(username)
+            ret = self.m_controller.getBasicUserInfoByName(username)
+            if ret is None:
+                raise Exception("no such user")
+            return ret
         except Exception:
-            pass
-
-        raise ParseError("Unknown user {}".format(username))
+            raise ParseError("Unknown user {}".format(username))
 
     def _handleHelp(self, args):
         if len(args) != 1:

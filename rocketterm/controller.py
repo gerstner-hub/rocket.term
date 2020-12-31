@@ -476,20 +476,25 @@ class Controller:
         members = self.m_room_members.get(room.getID(), set())
         return [self.m_basic_user_infos[uid] for uid in members]
 
-    def getBasicUserInfoByName(self, username):
+    def getBasicUserInfoByName(self, username, only_cached=False):
         """Returns a BasicUserInfo instance for the given username.
 
         This tries to find a cached UserInfo for the username. If this is not
-        possible the remote server will be queried. If the username is unknown
-        then None will be returned.
+        possible the remote server will be queried, unless only_cached is set.
+        If the username is unknown then None will be returned.
         """
         try:
             uid = self.m_username_id_map[username]
             return self.m_basic_user_infos[uid]
         except KeyError:
-            info = self.m_comm.getUserInfoByName(username)
-            if info:
-                self._cacheUserInfo(info)
+            if only_cached:
+                return None
+            try:
+                info = self.m_comm.getUserInfoByName(username)
+            except Exception:
+                return None
+
+            self._cacheUserInfo(info)
             return info
 
     def getBasicUserInfoByID(self, uid):
