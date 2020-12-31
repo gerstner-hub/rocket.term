@@ -334,7 +334,7 @@ class Controller:
         if not room:
             return None
 
-        return self.m_room_msg_ids[room.getID()][msg_id]
+        return self.m_room_msg_ids[room.getID()].get(msg_id, None)
 
     def loadMoreRoomMessages(self, room=None, amount=None):
         """Loads additional message history for the given room object.
@@ -690,8 +690,7 @@ class Controller:
         if new_msg.getServerTimestamp() <= newest.getServerTimestamp():
             return True
         elif old_msg and old_msg.getNumReplies() != new_msg.getNumReplies():
-            # a thread was opened or altered, ignore (we could make a "thread
-            # activity callback" out of this somewhen)
+            self.m_callbacks.handleThreadActivity(old_msg, new_msg)
             return True
 
         return False

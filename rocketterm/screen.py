@@ -39,6 +39,25 @@ class Screen:
         ('input', 'white', 'black')
     )
 
+    cycle_colors = (
+        # 'black',
+        # 'white'
+        'dark red',
+        'dark green',
+        'brown',
+        'dark blue',
+        'dark magenta',
+        'dark cyan',
+        'light gray',
+        'dark gray',
+        'light red',
+        'light green',
+        'yellow',
+        'light blue',
+        'light magenta',
+        'light cyan',
+    )
+
     def __init__(self, global_objects):
         """
         :param dict config: The preprocessed configuration data.
@@ -150,28 +169,25 @@ class Screen:
         except KeyError:
             pass
 
-        user_colors = (
-            # 'black',
-            'dark red',
-            'dark green',
-            'brown',
-            'dark blue',
-            'dark magenta',
-            'dark cyan',
-            'light gray',
-            'dark gray',
-            'light red',
-            'light green',
-            'yellow',
-            'light blue',
-            'light magenta',
-            'light cyan',
-            'white'
-        )
+        user_colors = self.cycle_colors
+
         next_color = user_colors[len(self.m_user_colors) % len(user_colors)]
         self.m_user_colors[user] = next_color
 
         return next_color
+
+    def _getMsgNrColor(self, msg, nr):
+        if msg.getNumReplies() == 0 or msg.isIncrementalUpdate():
+            return 'text'
+        else:
+            return urwid.AttrSpec(self._getThreadColor(nr), 'black')
+
+    def _getThreadColor(self, thread_nr):
+        """Returns an urwid color name to be used for the given thread
+        number."""
+
+        thread_colors = self.cycle_colors
+        return thread_colors[thread_nr % len(thread_colors)]
 
     def _updateMainHeading(self):
         our_status = self.m_controller.getUserStatus(
@@ -332,8 +348,7 @@ class Screen:
             self._refreshRoomState(room)
             name_attr = self._getRoomColor(room)
             prefix_attr = self._getRoomPrefixColor(room)
-            # truncate room names to avoid line breaks in list
-            # items
+            # truncate room names to avoid line breaks in list items
             truncated_name = name[1:max_width - 2]
             parts = []
             parts.append((prefix_attr, name[0]))
@@ -475,12 +490,17 @@ class Screen:
         return len(more_msgs)
 
     def _getThreadLabel(self, msg, consecutive_nr):
+        """Returns a tuple of (label_text, label_color)."""
         max_width = self._getMaxMsgNrWidth()
+
         parent = msg.getThreadParent()
 
-        if not parent:
+        if not parent and msg.isIncrementalUpdate() and msg.getNumReplies() != 0:
+            # it's an update to a thread message, reference ourselves then
+            parent = msg.getID()
+        elif not parent:
             # three extra characters for the two spaces and the '#'
-            return (max_width + 3) * ' '
+            return (max_width + 3) * ' ', 'text'
 
         nr_list = self.m_msg_nr_map.get(parent, [])
         if not nr_list:
@@ -492,10 +512,12 @@ class Screen:
             # use a marker that we can later
             # replace when we know the thread nr.
             parent_nr = '?' * max_width
+            color = 'text'
         else:
             parent_nr = nr_list[0]
+            color = urwid.AttrSpec(self._getThreadColor(parent_nr), 'black')
 
-        return " #{} ".format(str(parent_nr).rjust(max_width))
+        return " #{} ".format(str(parent_nr).rjust(max_width)), color
 
     def _getUpdateMessagePrefix(self, msg, nr):
         # add the original message nr# as a prefix here and handle resolving
@@ -834,7 +856,7 @@ class Screen:
         timestamp = msg.getCreationTimestamp().strftime("%X")
         username = msg.getUserInfo().getUsername()
         userprefix = " {}: ".format(username.rjust(15))
-        thread_id = self._getThreadLabel(msg, nr)
+        thread_id, thread_color = self._getThreadLabel(msg, nr)
 
         prefix_len = len(nr_label) + len(timestamp) + len(userprefix) + len(thread_id)
         messagewidth = max(self.m_chat_box.getNumCols(), 80) - prefix_len - 1
@@ -848,11 +870,12 @@ class Screen:
         message = self._wrapText(msg_text, messagewidth, prefix_len)
 
         user_color = self._getUserColor(username)
+        parent_color = self._getMsgNrColor(msg, nr)
 
         text = urwid.Text([
-            ('text', nr_label),
+            (parent_color, nr_label),
             ('text', timestamp),
-            ('text', thread_id),
+            (thread_color, thread_id),
             (urwid.AttrSpec(user_color, 'black'), userprefix),
             ('text', message)
         ])
@@ -1067,7 +1090,7 @@ class Screen:
 
     def getNrsForMsgID(self, msg_id):
         """Returns a list of consecutive msg nrs# for a msg ID."""
-        return self.m_msg_nr_map[msg_id]
+        return self.m_msg_nr_map.get(msg_id, [])
 
     def newRoomSelected(self):
         """Called by the Controller when a new room was selected."""
@@ -1087,6 +1110,23 @@ class Screen:
         """Called by the Controller when our own user status changed."""
         # update the status displayed in the main heading
         self._updateMainHeading()
+
+    def handleThreadActivity(self, old_msg, new_msg):
+        """Check whether we need to update thread coloring if a new thread was
+        opened."""
+        if old_msg.getNumReplies() > 1:
+            # thread existed already before
+            return
+
+        msg_nrs = self.getNrsForMsgID(new_msg.getID())
+
+        if not msg_nrs:
+            return
+
+        # only update the original message
+        row_nr = self._getMsgRowNr(msg_nrs[0])
+        new_text = self._formatChatMessage(new_msg, msg_nrs[0])
+        self.m_chat_box.body[row_nr] = new_text
 
     def handleNewRoomMessage(self, msg):
         """Called by the Controller when in a new message appeared in one of
