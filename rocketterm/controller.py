@@ -5,6 +5,8 @@ import functools
 import logging
 import threading
 
+import rocketterm.emojis
+
 
 class Controller:
     """The Controller holds the non-graphical program state and offers an
@@ -623,6 +625,16 @@ class Controller:
         self.m_comm.joinChannel(room)
         self.m_awaited_room = room
 
+    def fetchCustomEmojiData(self, force_refresh=False):
+        if not force_refresh and self.m_custom_emoji_list is not None:
+            return
+
+        self.m_custom_emoji_list = self.m_comm.getCustomEmojiList()
+
+        rocketterm.emojis.addCustomEmojis(
+            [emoji.getName() for emoji in self.m_custom_emoji_list]
+        )
+
     def getEmojiData(self):
         """Returns a dictionary of emoji categories and their names.
 
@@ -631,15 +643,9 @@ class Controller:
             [...]
         }
         """
-        if self.m_custom_emoji_list is None:
-            self.m_custom_emoji_list = self.m_comm.getCustomEmojiList()
+        self.fetchCustomEmojiData()
 
-        import rocketterm.emojis
-
-        ret = copy.copy(rocketterm.emojis.EMOJIS_BY_CATEGORY)
-        ret['custom'] = [emoji.getName() for emoji in self.m_custom_emoji_list]
-
-        return ret
+        return rocketterm.emojis.EMOJIS_BY_CATEGORY
 
     def _getRoomToOperateOn(self, room):
         """Helper function to implement the often used logic to operate either

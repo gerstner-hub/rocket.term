@@ -1440,3 +1440,14 @@ EMOJIS_BY_CATEGORY = {
         'flag_mf'
     ]
 }
+
+ALL_EMOJIES = set()
+for emojis in EMOJIS_BY_CATEGORY.values():
+    for emoji in emojis:
+        ALL_EMOJIES.add(emoji)
+
+
+def addCustomEmojis(custom_emojis):
+    EMOJIS_BY_CATEGORY['custom'] = custom_emojis
+    for emoji in custom_emojis:
+        ALL_EMOJIES.add(emoji)
