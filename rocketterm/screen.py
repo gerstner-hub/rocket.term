@@ -196,12 +196,14 @@ class Screen:
 
         parts = []
 
+        email = self.m_comm.getEmail()
+
         parts.append((
             'border',
             "Rocket.term {}@{} ({}, {}) ".format(
                 self.m_comm.getUsername(),
                 self.m_comm.getServerURI().getServerName(),
-                self.m_comm.getFullName(), self.m_comm.getEmail(),
+                self.m_comm.getFullName(), email if email else "<unknown email>",
             )
         ))
 

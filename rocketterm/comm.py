@@ -133,7 +133,7 @@ class RocketComm:
         user_info = self.m_rest_session.login(self.m_login_data.getRESTLoginParams())
 
         self.m_our_user_id = user_info["_id"]
-        self.m_email = user_info["email"]
+        self.m_email = user_info.get("email", None)
         self.m_full_name = user_info["name"]
         self.m_username = user_info["username"]
 

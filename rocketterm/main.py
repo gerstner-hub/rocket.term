@@ -159,11 +159,13 @@ class RocketTerm:
             self.m_logger.error(str(e))
             raise
 
+        email = self.m_comm.getEmail()
+
         print("Logged in as {} ({}, {})".format(
             self.m_comm.getFullName(),
             self.m_comm.getUsername(),
-            self.m_comm.getEmail())
-        )
+            email if email else "<unknown email>"
+        ))
 
         return True
 
