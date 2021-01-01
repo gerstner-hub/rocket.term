@@ -93,8 +93,10 @@ class CommandInput(urwid.Edit):
         elif self.m_cur_history_pos == len(self.m_history) - 1:
             if self.m_pending_cmd:
                 self._replaceText(self.m_pending_cmd)
-                self.m_cur_history_pos = -1
                 self.m_pending_cmd = ""
+            else:
+                self._replaceText("")
+            self.m_cur_history_pos = -1
             return
         else:
             self.m_cur_history_pos += 1
