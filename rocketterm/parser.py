@@ -401,9 +401,13 @@ class Parser:
 
         expect_room = command in (
                 Command.HideRoom, Command.OpenRoom, Command.SendMessage,
-                Command.SelectRoom, Command.LeaveRoom, Command.DestroyRoom
+                Command.SelectRoom, Command.LeaveRoom, Command.DestroyRoom,
+                Command.ReplyInThread
         )
-        expect_user = command in (Command.SendMessage, Command.WhoIs, Command.GetUserStatus, Command.ChatWith)
+        expect_user = command in (
+                Command.SendMessage, Command.WhoIs, Command.GetUserStatus,
+                Command.ChatWith, Command.ReplyInThread
+        )
         room_filters = []
 
         if expect_room:
