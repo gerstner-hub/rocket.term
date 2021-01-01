@@ -98,6 +98,48 @@ class ParseError(Exception):
         return self.msg
 
 
+class _CompletionContext:
+    """Command line completion context used within the Parser class."""
+
+    def __init__(self, line, command, args, quotechar):
+        self.candidates = []
+        self.line = line
+        self.command = command
+        self.args = args
+        self.quotechar = quotechar
+        if not args:
+            self.word = ""
+            self.prefix = self.line
+            return
+        elif self.args[-1]:
+            self.word = args[-1].split()[-1]
+        else:
+            self.word = args[-1]
+
+        # this contains the unmodified input line up to the to-be-completed
+        # word
+        self.prefix = self.line[:line.rfind(self.word)]
+
+        # if there is no prefix word for completion and we added a quote
+        # character, then remove that from the prefix line to avoid that being
+        # added as part of the completion.
+        if self.prefix == self.line and quotechar:
+            self.prefix = self.line[:-1]
+
+    def setCandidates(self, candidates):
+        self.candidates = candidates
+
+    def getCandidates(self):
+        self.candidates.sort()
+        return self.candidates
+
+    def getOriginalLine(self):
+        if not self.quotechar:
+            return self.line
+        else:
+            return self.line[:-1]
+
+
 def _filterRoomType(room, type_prefix):
     return room.typePrefix() == type_prefix
 
@@ -185,38 +227,74 @@ class Parser:
         if not line:
             return [], None
 
-        partial_cmd = ""
+        if self._isPartialCommand(line):
+            return self._completeParialCommand(line)
 
-        try:
-            cmd, args = self._splitCommand(line)
-        except Exception:
-            # maybe we need to complete the command itself
-            args = shlex.split(line)
-            if len(args) == 1:
-                partial_cmd = args[0]
-                args = []
-            else:
-                return [], None
-
-        candidates = []
-
-        if partial_cmd.startswith(self.CMD_INIT):
-            candidates = self._getCommandCompletionCandidates(partial_cmd[1:])
-            candidates = [self.CMD_INIT + cand for cand in candidates]
+        # if we are about to complete a partially quoted argument like:
+        # '"where is # @a<tab>' then we'll get parsing errors from the shlex
+        # module ... therefore attempt to split the argument with added
+        # quotes to fix this situation. After splitting the quotes will be
+        # removed anyway. The _CompletionContext.prefix will contain the
+        # unmodified input line up to the to-be-completed word.
+        for quote in ('', '"', '\''):
+            try:
+                line += quote
+                cmd, args = self._splitCommand(line)
+                break
+            except ParseError:
+                if quote:
+                    line = line[:-1]
         else:
-            special_completer = self.m_special_completers.get(cmd, None)
+            return [], None
 
-            if special_completer:
-                candidates = special_completer(cmd, args)
-            # for generic room/user completion only do this if
-            # there are actually arguments
-            elif args:
-                candidates = self._getParameterCompletionCandidates(cmd, args)
+        context = _CompletionContext(line, cmd, args, quote)
 
-        candidates.sort()
-        return candidates, self._completeLine(line, candidates)
+        special_completer = self.m_special_completers.get(cmd, None)
 
-    def _completeLine(self, line, candidates):
+        if special_completer:
+            cands = special_completer(context)
+        # for generic room/user completion only do this if
+        # there are actually arguments
+        elif args:
+            cands = self._getParameterCompletionCandidates(context)
+        else:
+            cands = []
+
+        context.setCandidates(cands)
+
+        self.m_logger.debug(
+            "completion context: command = {}, prefix = {}, args = {}, word = {}\n\tcandidates = {}".format(
+                context.command, context.prefix, context.args, context.word, context.candidates
+            )
+        )
+        return context.getCandidates(), self._completeLine(context)
+
+    def _completeParialCommand(self, line):
+        self.m_logger.debug("completing partial command {}".format(line))
+        candidates = self._getCommandCompletionCandidates(line[1:])
+        candidates = [self.CMD_INIT + cand for cand in candidates]
+        context = _CompletionContext(line, None, [line], '')
+        context.setCandidates(candidates)
+        return context.getCandidates(), self._completeLine(context)
+
+    def _isPartialCommand(self, line):
+        """If line contains only a partial command to complete then this is
+        returned, otherwise an empty string."""
+
+        if not line.startswith(self.CMD_INIT):
+            return False
+
+        args = line.split()
+        if len(args) == 1:
+            try:
+                _ = Command(args[0][1:])
+            except ValueError:
+                # we need to complete the command itself
+                return True
+
+        return False
+
+    def _completeLine(self, context):
         """This performs the actual completion of the input line based on the
         available completion candidates.
 
@@ -224,28 +302,24 @@ class Parser:
                  completion is possible.
         """
 
-        if not candidates:
-            return line
+        if not context.candidates:
+            return context.getOriginalLine()
 
         # there seems to be no python std. library function around that can do
         # this for us ... but it's not even that hard.
 
-        # the base word (whitespace separated) that we're trying to
-        # tab-complete
-        parts = shlex.split(line)
-        word = parts[-1]
         # the characters that we can try to add to the base word, if
-        # it they shared a common prefix with all the candidate words
-        left_chars = candidates[0][len(word):]
+        # they share a common prefix with all the candidate words
+        left_chars = context.candidates[0][len(context.word):]
         # the actual characters that we're appending to line
         to_add = ""
 
         while left_chars:
-            tester = word + to_add + left_chars[0]
+            tester = context.word + to_add + left_chars[0]
 
-            # checks whether this prefix is still shared with all
-            # the candidates
-            matches = all([cand.startswith(tester) for cand in candidates])
+            # checks whether this prefix is still shared with all the
+            # candidates
+            matches = all([cand.startswith(tester) for cand in context.candidates])
 
             if matches:
                 to_add += left_chars[0]
@@ -253,15 +327,11 @@ class Parser:
             else:
                 break
 
-        new_word = word + to_add
+        new_word = context.word + to_add
 
-        # the new word contains whitespace, so add quotes
-        if len(new_word.split()) != 1:
-            new_word = '"{}"'.format(new_word)
+        ret = context.prefix + new_word
 
-        ret = ' '.join(parts[:-1] + [new_word])
-
-        if len(candidates) == 1 and not ret.endswith(' '):
+        if len(context.candidates) == 1 and not ret.endswith(' '):
             # if this is the only possible completion also add
             # whitespace to allow adding another word right away
             ret += " "
@@ -306,35 +376,37 @@ class Parser:
         possible = [c.value for c in Command.__members__.values() if c not in HIDDEN_COMMANDS]
         return [cmd for cmd in possible if cmd.startswith(prefix)]
 
-    def _getUserStatusCompletionCandidates(self, command, args):
+    def _getUserStatusCompletionCandidates(self, context):
         states = [s.value for s in rocketterm.types.UserPresence]
 
-        if not args:
+        if not context.args:
             return states
-        elif len(args) != 1:
+        elif len(context.args) != 1:
             return []
 
-        prefix = args[0]
+        prefix = context.args[0]
 
         return [s for s in states if s.startswith(prefix)]
 
-    def _getHelpCompletionCandidates(self, command, args):
-        if not args:
-            prefix = ""
-        elif len(args) == 1:
-            prefix = args[0]
-        else:
+    def _getHelpCompletionCandidates(self, context):
+        if len(context.args) > 1:
             return []
+
+        prefix = context.word
 
         return self._getCommandCompletionCandidates(prefix)
 
-    def _getChannelCompletionCandidates(self, command, args):
-        if not args or len(args) != 1:
+    def _getChannelCompletionCandidates(self, context):
+        if len(context.args) > 1:
             return []
 
-        prefix = args[0]
+        prefix = context.word
 
-        if not prefix.startswith(rocketterm.types.ChatRoom.typePrefix()):
+        channel_prefix = rocketterm.types.ChatRoom.typePrefix()
+
+        if not prefix:
+            prefix = channel_prefix
+        elif not prefix.startswith(channel_prefix):
             return []
 
         ret = []
@@ -348,13 +420,15 @@ class Parser:
 
         return ret
 
-    def _getReactionCompletionCandidates(self, command, args):
-        if not args or len(args) != 2:
+    def _getReactionCompletionCandidates(self, context):
+        if len(context.args) != 2:
             return []
 
         # syntax: #msgnr [+|-]:<emoji>:
+        # TODO: for removal we could check the msg argument for existing
+        # reactions and offer only them.
 
-        emoji = args[1]
+        emoji = context.word
 
         operator = emoji[0]
         if operator in ('+', '-'):
@@ -371,14 +445,14 @@ class Parser:
         if prefix != ':':
             return []
 
-        candidates = self._getEmojiCompletionCandidates(command, base)
+        candidates = self._getEmojiCompletionCandidates(context, base)
 
         if emoji.startswith(operator):
             candidates = [operator + cand for cand in candidates]
 
         return candidates
 
-    def _getEmojiCompletionCandidates(self, command, base):
+    def _getEmojiCompletionCandidates(self, context, base):
         emojis_dict = self.m_controller.getEmojiData()
         emojis = sum(emojis_dict.values(), [])
 
@@ -386,9 +460,14 @@ class Parser:
         candidates = [emoji for emoji in emoji_names if emoji.startswith(base)]
         return candidates
 
-    def _getParameterCompletionCandidates(self, command, args):
+    def _getParameterCompletionCandidates(self, context):
         """Performs generic parameter completion for rooms, users etc."""
-        to_complete = args[-1]
+        command = context.command
+
+        to_complete = context.word
+
+        if not to_complete:
+            return []
 
         room_prefixes = [rt.typePrefix() for rt in rocketterm.types.ROOM_TYPES]
         user_prefix = rocketterm.types.UserInfo.typePrefix()
