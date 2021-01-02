@@ -107,6 +107,7 @@ class _CompletionContext:
         self.command = command
         self.args = args
         self.quotechar = quotechar
+        self.argindex = len(args) - 1
         if not args:
             self.word = ""
             self.prefix = self.line
@@ -487,6 +488,16 @@ class Parser:
             Command.SendMessage, Command.WhoIs, Command.GetUserStatus,
             Command.ChatWith, Command.ReplyInThread, Command.EditMessage
         )
+        arg_indices = {
+            Command.ReplyInThread: [1],
+            Command.EditMessage: [1]
+        }
+
+        arg_limits = arg_indices.get(command, [])
+
+        if arg_limits and context.argindex not in arg_limits:
+            return []
+
         room_filters = []
 
         if expect_room:
