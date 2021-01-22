@@ -1015,7 +1015,7 @@ class Screen:
         if len(word) > 1 and word.startswith('@'):
             # remove any suffix characters that aren't part of the username
             rest = ""
-            while word and not word[-1].isalpha():
+            while word and not word[-1].isalnum():
                 rest += word[-1]
                 word = word[:-1]
             # actively querying uncached usernames here is heavily slowing
