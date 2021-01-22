@@ -633,3 +633,7 @@ class RocketComm:
     def getServerInfo(self):
         info = self.m_rest_session.getInfo()
         return rocketterm.types.ServerInfo(info)
+
+    def getMessageByID(self, msg_id):
+        msg = self.m_rest_session.getMessage(msg_id)
+        return rocketterm.types.RoomMessage(msg['message'])

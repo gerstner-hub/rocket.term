@@ -43,6 +43,7 @@ class Command(Enum):
     DelStar = "unstar"
     GetServerInfo = "serverinfo"
     UrlOpen = "urlopen"
+    FetchMessage = "fetchmsg"
 
 
 # the first format placeholder will receive the actual command name
@@ -79,7 +80,8 @@ USAGE = {
     Command.SetStar: "/{} #MSGSPEC: stars a message for later reference.",
     Command.DelStar: "/{} #MSGSPEC: removes a star previously added to a message.",
     Command.GetServerInfo: "/{}: retrieves remote server information.",
-    Command.UrlOpen: "/{} URLSPEC: opens the given URL in the configured browser."
+    Command.UrlOpen: "/{} URLSPEC: opens the given URL in the configured browser.",
+    Command.FetchMessage: "/{} [MSGID|#MSGSPEC]: explicitly fetch the given message from REST API."
 }
 
 HIDDEN_COMMANDS = set([
@@ -88,7 +90,8 @@ HIDDEN_COMMANDS = set([
     Command.AddLogfile,
     Command.SetLogLevel,
     Command.RepeatMessage,
-    Command.GetServerInfo
+    Command.GetServerInfo,
+    Command.FetchMessage
 ])
 
 
@@ -1103,3 +1106,22 @@ class Parser:
         self.m_screen.refresh()
 
         return "Opened URL {} in {}".format(url, browser)
+
+    def _handleFetchmsg(self, args):
+
+        if len(args) != 1:
+            return "expected exactly one parameter: MSGID."
+
+        arg = args[0]
+
+        if arg.startswith('#'):
+            msg_nr = self._processMsgNrArg(arg)
+            msg_id = self._resolveMsgNr(msg_nr)
+        else:
+            msg_id = arg
+
+        msg = self.m_comm.getMessageByID(msg_id)
+
+        self.m_logger.info(msg.getRaw())
+
+        return "Fetched message {}".format(msg.getID())

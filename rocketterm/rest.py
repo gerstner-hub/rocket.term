@@ -82,7 +82,7 @@ class RestSession:
         if not self._shouldDebug():
             return
 
-        msg = "-> Request {} ".format(call.__name__.upper())
+        msg = "-> Request {} {} ".format(call.__name__.upper(), url)
         if headers:
             entries = ['='.join((key, val)) for key, val in headers.items()]
             msg += "with headers {}".format(', '.join(entries))
@@ -393,3 +393,13 @@ class RestSession:
 
         resp = self._get("info")
         return resp["info"]
+
+    def getMessage(self, msg_id):
+        """Returns a single chat message by explicit message ID reference."""
+
+        resp = self._get(
+            "chat.getMessage",
+            url_params={"msgId": msg_id}
+        )
+
+        return resp
