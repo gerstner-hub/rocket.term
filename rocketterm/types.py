@@ -550,6 +550,39 @@ class URLMeta:
     def getTitle(self):
         return self.m_data.get("pageTitle", "")
 
+    def getOEmbedType(self):
+        """Returns the oembed type of the metadata, if any.
+
+        For details see https://oembed.com. Possible types are 'photo',
+        'video', 'link', 'rich'.
+        """
+        return self.m_data.get("oembedType", "")
+
+    def getOEmbedAuthorName(self):
+        return self.m_data.get("oembedAuthorName", "")
+
+    def getOEmbedHTML(self):
+        """For oembed type 'rich' this returns the to-be-embedded HTML."""
+        return self.m_data.get("oembedHtml", "")
+
+    def getOEmbedTitle(self):
+        """For some oembed types this returns the resource title"""
+        return self.m_data.get("oembedTitle", "")
+
+
+class URLHeaders:
+    """Header information that is sent by RC when URLs are included in chat
+    messages."""
+
+    def __init__(self, data):
+        self.m_data = data
+
+    def getContentType(self):
+        return self.m_data.get("contentType", None)
+
+    def getContentLength(self):
+        return self.m_data.get("contentLength", None)
+
 
 class URLInfo:
 
@@ -560,7 +593,8 @@ class URLInfo:
         return self.m_data
 
     def getHeaders(self):
-        return self.m_data.get("headers", {})
+        ret = self.m_data.get("headers", {})
+        return URLHeaders(ret) if ret else None
 
     def getMeta(self):
         ret = self.m_data.get("meta", {})

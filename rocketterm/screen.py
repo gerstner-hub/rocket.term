@@ -375,6 +375,11 @@ class Screen:
         self.m_msg_id_map = {}
         # maps message nrs. to listbox rows
         self.m_msg_nr_row_map = {}
+        # this contains all URLs posted in the room for being able to open
+        # them on user request
+        self.m_url_list = []
+        # this maps the URL text to the URL index in m_url_list
+        self.m_url_map = {}
         # offset to add to values stored in m_msg_nr_row_map,
         # see _recordMsgNr() for a detailed explanation
         self.m_row_offset = 0
@@ -583,8 +588,14 @@ class Screen:
                 ))
                 return "unknown message type change"
         elif new_msg.wasEdited() and new_msg.getEditTime() != old_msg.getEditTime():
-            return rocketterm.utils.getMessageEditContext(new_msg)
-        elif old_msg.getReactions() != new_msg.getReactions():
+            ret = rocketterm.utils.getMessageEditContext(new_msg)
+            if old_msg.getURLs() != new_msg.getURLs():
+                changed_urls = self._getChangedURLInfo(old_msg, new_msg)
+                ret += "\n"
+                ret += changed_urls
+            return ret
+
+        if old_msg.getReactions() != new_msg.getReactions():
             return self._getChangedReactionsText(old_msg, new_msg)
         elif old_msg.getStars() != new_msg.getStars():
             return self._getChangedStarsText(old_msg, new_msg)
@@ -625,30 +636,27 @@ class Screen:
 
         changes = []
 
-        old_urls = old_msg.getURLs()
+        old_urls = dict([(url.getURL(), url) for url in old_msg.getURLs()])
         new_urls = new_msg.getURLs()
 
-        if len(old_urls) != len(new_urls):
-            return "number of parsed URLs changed. unsupported."
+        for new in new_urls:
+            old = old_urls.get(new.getURL(), None)
+            meta = new.getMeta()
+            headers = new.getHeaders()
 
-        for old, new in zip(old_urls, new_urls):
-            old_meta = old.getMeta()
-            new_meta = new.getMeta()
-            if old_meta == new_meta:
+            if old and old.getMeta() == meta and old.getHeaders() == headers:
+                # nothing changed
                 continue
 
-            if not new_meta.getTitle() and not new_meta.getDescription():
-                continue
+            changes += ["[updated information on {}]:".format(new.getURL())]
 
-            text = "\n[additional information on {}]:".format(new.getURL())
-            if new_meta.getTitle():
-                text += "\ntitle = {}".format(new_meta.getTitle().strip())
-            if new_meta.getDescription():
-                text += "\ndescription = {}".format(new_meta.getDescription().strip())
-            changes.append(text)
+            url_nr = self._recordURL(new.getURL())
+            urlinfo = self._getURLText(new, url_nr)
+            changes.append(urlinfo)
 
         if not changes:
             changes.append("[unknown changes in URL information]")
+            self.m_logger.warning("no change in {} vs.  {}?".format(old_msg.getRaw(), new_msg.getRaw()))
 
         return '\n'.join(changes)
 
@@ -726,14 +734,9 @@ class Screen:
                 )
 
             for url in msg.getURLs():
-                meta = url.getMeta()
-                if not meta or not meta.getTitle():
-                    continue
-
-                text += "\n[URL {} information]:".format(url.getURL())
-                text += "\ntitle = {}".format(meta.getTitle().strip())
-                if meta.getDescription():
-                    text += "\ndescription = {}".format(meta.getDescription().strip())
+                url_nr = self._recordURL(url.getURL())
+                text += "\n"
+                text += self._getURLText(url, url_nr)
 
             return text
         elif _type in (MessageType.UserLeft, MessageType.UserJoined):
@@ -799,6 +802,59 @@ class Screen:
             return "[{}]".format(event)
         else:
             return "unsupported special message type {}: {}".format(str(_type), raw_message)
+
+    def _getURLText(self, url, index):
+        meta = url.getMeta()
+        headers = url.getHeaders()
+
+        url_prefix = "[{}]: ".format(index)
+        indent = len(url_prefix) * ' '
+        link = url_prefix + url.getURL()
+
+        if not meta:
+            return link
+
+        lines = [link]
+
+        title = meta.getTitle().strip()
+        description = meta.getDescription().strip()
+        oembed_type = meta.getOEmbedType()
+
+        # don't show header information for HTML website documents, it's too
+        # noisy
+        if headers and not headers.getContentType().startswith("text/html"):
+            _type, _length = headers.getContentType(), headers.getContentLength()
+            if _type:
+                lines += ["type: {}".format(_type)]
+            if _length:
+                kb = int(int(_length) / 1024.0)
+                if kb > 0:
+                    lines += ["length: {} kb".format(str(kb))]
+
+        if title:
+            lines += ["{}# {}".format(indent, title)]
+            if description:
+                lines += ["{}{}".format(indent, description)]
+
+        if oembed_type == "video":
+            lines += ["[contains video preview]"]
+        elif oembed_type == "photo":
+            lines += ["[contains photo preview]"]
+        elif oembed_type in ("rich", "link"):
+            author = meta.getOEmbedAuthorName()
+            title = meta.getOEmbedTitle()
+            html = meta.getOEmbedHTML()
+            if author:
+                lines += ["author: {}".format(author)]
+            if title:
+                lines += ["# {}".format(title)]
+            if html:
+                text = rocketterm.utils.convertHTMLToText(html)
+                lines += [text.strip()]
+        elif oembed_type:
+            lines += ["[unknown oembed type {} encountered]".format(oembed_type)]
+
+        return '\n'.join(lines)
 
     def _recordMsgNr(self, nr, msg, at_end):
         # we need to keep a list here, because with message editing
@@ -1246,6 +1302,17 @@ class Screen:
     def _getOldestLoadedMsgNr(self):
         return self.m_controller.getRoomMsgCount() - self.m_num_chat_msgs + 1
 
+    def _recordURL(self, url):
+        try:
+            return self.m_url_map[url]
+        except KeyError:
+            pass
+
+        self.m_url_list.append(url)
+        nr = len(self.m_url_list)
+        self.m_url_map[url] = nr
+        return nr
+
     def getMsgIDForNr(self, msg_nr):
         """Returns the msg ID for a consecutive msg nr#."""
         return self.m_msg_id_map[msg_nr]
@@ -1387,6 +1454,19 @@ class Screen:
         self.m_controller.leaveThread()
         self.m_cmd_input.resetPrompt()
 
+    def getURLForIndex(self, index):
+        """Returns the URL the given url [index] refers to.
+
+        returns None if no such URL exists.
+        """
+
+        index -= 1
+
+        if index < 0 or index >= len(self.m_url_list):
+            return
+
+        return self.m_url_list[index]
+
     def scrollToMessage(self, msg_nr):
         """Scrolls the current chat box to the given msg nr#.
 
@@ -1433,6 +1513,10 @@ class Screen:
 
         self._setStatusMessage(feedback)
         self.m_loop.draw_screen()
+
+    def refresh(self):
+        """Force redraw of the complete screen."""
+        self.m_loop.screen.clear()
 
     def loadHistoryEnded(self, room):
         """Like loadHistoryStarted(), but after a chunk of history was

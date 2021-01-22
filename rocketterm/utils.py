@@ -1,5 +1,8 @@
 # vim: ts=4 et sw=4 sts=4 :
 
+from html.parser import HTMLParser
+
+
 class CommandEvaluator:
     """Helper class that runs an external command and returns its standard
     output as a string."""
@@ -137,3 +140,22 @@ def getServerHasSetUserStatusBug(server_info):
         return True
     else:
         return False
+
+
+class HTMLToTextConverter(HTMLParser):
+
+    def __init__(self):
+        super().__init__()
+        self.m_text = ""
+
+    def handle_data(self, data):
+        self.m_text += data
+
+    def get_text(self):
+        return self.m_text
+
+
+def convertHTMLToText(html):
+    converter = HTMLToTextConverter()
+    converter.feed(html)
+    return converter.get_text()

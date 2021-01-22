@@ -3,7 +3,9 @@
 from enum import Enum
 import functools
 import logging
+import os
 import shlex
+import subprocess
 
 import rocketterm.types
 
@@ -40,6 +42,7 @@ class Command(Enum):
     SetStar = "star"
     DelStar = "unstar"
     GetServerInfo = "serverinfo"
+    UrlOpen = "urlopen"
 
 
 # the first format placeholder will receive the actual command name
@@ -76,6 +79,7 @@ USAGE = {
     Command.SetStar: "/{} #MSGSPEC: stars a message for later reference.",
     Command.DelStar: "/{} #MSGSPEC: removes a star previously added to a message.",
     Command.GetServerInfo: "/{}: retrieves remote server information.",
+    Command.UrlOpen: "/{} URLSPEC: opens the given URL in the configured browser."
 }
 
 HIDDEN_COMMANDS = set([
@@ -995,7 +999,6 @@ class Parser:
         import bdb
         import pdb
         import pty
-        import subprocess
 
         try:
             master, slave = pty.openpty()
@@ -1071,3 +1074,32 @@ class Parser:
         info = self.m_comm.getServerInfo()
 
         return str(info.getVersion())
+
+    def _handleUrlopen(self, args):
+
+        if len(args) != 1:
+            return "expected exactly one parameter: URLSPEC. Example: /urlopen [1]"
+
+        urlspec = args[0]
+
+        if len(urlspec) < 3 or not urlspec[1:-1].isnumeric():
+            return "invalid URLSPEC syntax. Expected something like '[4]'"
+
+        urlnum = int(urlspec[1:-1])
+
+        url = self.m_screen.getURLForIndex(urlnum)
+        if not url:
+            return "Invalid URLSPEC [{}]. No such URL.".format(urlnum)
+
+        browser = os.environ.get('BROWSER', None)
+
+        if not browser:
+            return "$BROWSER environment variable not set. Cannot open URL."
+
+        subprocess.call([browser, url], stderr=subprocess.DEVNULL)
+
+        # if this was a terminal app that took over control of graphics then
+        # force redraw of the urwid screen to put everything back in place
+        self.m_screen.refresh()
+
+        return "Opened URL {} in {}".format(url, browser)
