@@ -713,7 +713,7 @@ class Controller:
 
         return msg.getClientTimestamp() <= newest.getClientTimestamp()
 
-    def _ignoreMessageUpdate(self, room_msgs, old_msg, new_msg):
+    def _shouldProcessMessageUpdate(self, room_msgs, old_msg, new_msg):
         """Returns a boolean whether the given updated RoomMessage should be
         ignored from processing."""
 
@@ -725,15 +725,26 @@ class Controller:
         # notifications go out, the first one will not have an updated
         # timestamp.
         if new_msg.getServerTimestamp() <= newest.getServerTimestamp():
-            return True
+            return False
         elif old_msg and old_msg.getNumReplies() != new_msg.getNumReplies():
             self.m_callbacks.handleThreadActivity(old_msg, new_msg)
-            return True
+            return False
         elif old_msg and old_msg.getMessageType() == MessageType.DiscussionCreated:
             # this means that a discussion sub-room has new messages
-            handle_it = self.m_callbacks.handleDiscussionActivity(old_msg, new_msg)
-            return not handle_it
+            return self.m_callbacks.handleDiscussionActivity(old_msg, new_msg)
 
+        for key, value in new_msg.getRaw().items():
+            if key in ('ts', '_updatedAt', 'u'):
+                # sometimes we get updates with resolved usernames, ignore
+                # that. that timestamp fields change is also expected.
+                continue
+
+            if key not in old_msg.getRaw():
+                return True
+            elif old_msg.getRaw()[key] != value:
+                return True
+
+        # nothing interesting changed
         return False
 
     def _newRoomMessage(self, collection, event, msg):
@@ -755,7 +766,7 @@ class Controller:
                 return
 
         if self._isMessageUpdate(messages, msg):
-            if self._ignoreMessageUpdate(messages, orig_msg, msg):
+            if not self._shouldProcessMessageUpdate(messages, orig_msg, msg):
                 return
 
             msg_to_add = copy.deepcopy(msg)
