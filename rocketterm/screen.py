@@ -436,6 +436,10 @@ class Screen:
             new_msgs = self._loadMoreChatHistory()
 
             if new_msgs == 0:
+                # this can happen with some strange inconsistencies on the
+                # server end, where messages are references that don't exist
+                # any more for some reason. even deleted messages are normally
+                # still existing for reference.
                 self.m_logger.warning("Failed to resolve some message references")
                 for target, waiters in self.m_waiting_for_msg_refs.items():
                     self.m_logger.warning("Waiting for #{}: {}".format(
