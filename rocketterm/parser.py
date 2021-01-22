@@ -44,6 +44,8 @@ class Command(Enum):
     GetServerInfo = "serverinfo"
     UrlOpen = "urlopen"
     FetchMessage = "fetchmsg"
+    CallRestAPIGet = "restget"
+    CallRealtimeAPI = "rtapi"
 
 
 # the first format placeholder will receive the actual command name
@@ -81,7 +83,9 @@ USAGE = {
     Command.DelStar: "/{} #MSGSPEC: removes a star previously added to a message.",
     Command.GetServerInfo: "/{}: retrieves remote server information.",
     Command.UrlOpen: "/{} URLSPEC: opens the given URL in the configured browser.",
-    Command.FetchMessage: "/{} [MSGID|#MSGSPEC]: explicitly fetch the given message from REST API."
+    Command.FetchMessage: "/{} [MSGID|#MSGSPEC]: explicitly fetch the given message from REST API.",
+    Command.CallRestAPIGet: "/{} endpoint: issue a raw REST API GET call. Result will be logged.",
+    Command.CallRealtimeAPI: "/{} method JSON: call a realtime API method. Result will be logged."
 }
 
 HIDDEN_COMMANDS = set([
@@ -91,7 +95,9 @@ HIDDEN_COMMANDS = set([
     Command.SetLogLevel,
     Command.RepeatMessage,
     Command.GetServerInfo,
-    Command.FetchMessage
+    Command.FetchMessage,
+    Command.CallRestAPIGet,
+    Command.CallRealtimeAPI
 ])
 
 
@@ -1129,3 +1135,36 @@ class Parser:
         self.m_logger.info(msg.getRaw())
 
         return "Fetched message {}".format(msg.getID())
+
+    def _handleRestget(self, args):
+
+        if len(args) != 1:
+            return "expected exactly one parameter: endpoint. Example: '/restget channels.counters?roomName=myRoom'"
+
+        reply = self.m_comm.callREST_Get(args[0])
+
+        self.m_logger.info("REST GET result for {}: {}".format(args[0], reply))
+
+        return "Performed REST GET request {}".format(args[0])
+
+    def _handleRtapi(self, args):
+
+        if len(args) != 2:
+            return "expected two parameters: 'method name' and 'JSON'. Example: /rtapi getRoomRoles '[ \"GENERAL\" ]'"
+
+        import json
+        import pprint
+
+        method = args[0]
+        try:
+            params = json.loads(args[1])
+        except Exception as e:
+            return "failed to parse JSON parameters: {}".format(e)
+
+        reply = self.m_comm.callRealtimeMethod(method, params)
+
+        self.m_logger.info("RTAPI method call '{} {}' result = '{}'".format(
+            method, pprint.pformat(params), pprint.pformat(reply)
+        ))
+
+        return "Performed realtime API method call {}".format(method)

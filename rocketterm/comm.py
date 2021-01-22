@@ -103,6 +103,12 @@ class RocketComm:
 
         return ret
 
+    def callREST_Get(self, endpoint):
+        return self.m_rest_session._get(endpoint)
+
+    def callRealtimeMethod(self, method, params):
+        return self.m_rt_session.methodCall(method, params)
+
     def setErrorCallback(self, callback):
         """Register a callback function that will be called if the API
         connection is lost."""
