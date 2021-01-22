@@ -126,7 +126,15 @@ class RestSession:
         self.m_logger.debug("<- Reply https status = {} ({})".format(ret.status_code, status_string))
         self.m_logger.debug("{}".format(pprint.pformat(json)))
 
-    def _request(self, request_call, endpoint, data, url_params):
+    def _getHeaders(self):
+        headers = {}
+        if self.m_auth_token and self.m_user_id:
+            # put cached authentication data into the headers for each call
+            headers["X-Auth-Token"] = self.m_auth_token
+            headers["X-User-Id"] = self.m_user_id
+        return headers
+
+    def _request(self, request_call, endpoint, data, url_params, convert_to_json=True, files=None):
         """Perform a specific REST API request.
 
         Note that RC REST endpoints accept some parameters only as URL
@@ -140,23 +148,26 @@ class RestSession:
                           as input data to the REST API request.
         :param dict url_params: A dictionary of key/value pairs to be encoded
                           as parameters into the REST API URL.
+        :param bool convert_to_json: Whether data should be converted to a
+                                     JSON string or otherwise be passed as is.
         :return: A request.Response object.
         """
         import json
-        headers = {}
-        if self.m_auth_token and self.m_user_id:
-            # put cached authentication data into the headers for each call
-            headers["X-Auth-Token"] = self.m_auth_token
-            headers["X-User-Id"] = self.m_user_id
         url = self._buildURL(endpoint)
+
+        headers = self._getHeaders()
 
         self._debugRequest(request_call, url, headers, data, url_params)
 
+        if convert_to_json:
+            data = json.dumps(data)
+
         ret = request_call(
             url,
-            data=json.dumps(data),
+            data=data,
             headers=headers,
-            params=url_params
+            params=url_params,
+            files=files
         )
 
         self._debugResult(ret)
@@ -177,7 +188,7 @@ class RestSession:
 
         return ret.json()
 
-    def _post(self, endpoint, data=None, good_status=200, url_params={}):
+    def _post(self, endpoint, data=None, good_status=200, url_params={}, convert_to_json=True, files=None):
         """Perform a specific REST API POST request.
 
         :param int good_status: The expected "good" http status reply code. On
@@ -185,7 +196,7 @@ class RestSession:
         :return: Returns a dictionary containing the reply data from the
                  server, if any.
          """
-        ret = self._request(self.m_session.post, endpoint, data, url_params)
+        ret = self._request(self.m_session.post, endpoint, data, url_params, convert_to_json, files)
 
         self._raiseOnBadStatus(ret, good_status)
 
@@ -403,3 +414,51 @@ class RestSession:
         )
 
         return resp
+
+    def uploadFileMessage(self, rid, path, filename=None, message=None,
+                          description=None, thread_id=None, mime_type=None):
+        """Upload a message with a file attachment.
+
+        :param str rid: The room ID where to post this message and attachment.
+        :param str path: The file on disk which to attach to the message.
+        :param str filename: The filename to send along with the data. If
+                             unset then the name will be take from the path
+                             argument's basename.
+        :param str message: An optional additional text message to send along
+                            with the attachment.
+        :param str description: An optional additional text description of the
+                                attachment.
+        :param str thread_id: An optional thread ID to attach the message to.
+        :param str mime_type: An optional explicit MIME type for the file
+                              attachment.
+        """
+
+        import os
+        import magic
+
+        data = {}
+
+        if message:
+            data['msg'] = message
+        if description:
+            data['description'] = description
+        if thread_id:
+            data['tmid'] = thread_id
+
+        with open(path, 'rb') as fd:
+            if not filename:
+                filename = os.path.basename(path)
+            if not mime_type:
+                m = magic.Magic(mime=True)
+                mime_type = m.from_file(path)
+
+            files = {
+                'file': (filename, fd, mime_type)
+            }
+
+            return self._post(
+                "rooms.upload/" + rid,
+                data,
+                files=files,
+                convert_to_json=False
+            )

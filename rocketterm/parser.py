@@ -46,6 +46,7 @@ class Command(Enum):
     FetchMessage = "fetchmsg"
     CallRestAPIGet = "restget"
     CallRealtimeAPI = "rtapi"
+    UploadFile = "upload"
 
 
 # the first format placeholder will receive the actual command name
@@ -85,7 +86,9 @@ USAGE = {
     Command.UrlOpen: "/{} URLSPEC: opens the given URL in the configured browser.",
     Command.FetchMessage: "/{} [MSGID|#MSGSPEC]: explicitly fetch the given message from REST API.",
     Command.CallRestAPIGet: "/{} endpoint: issue a raw REST API GET call. Result will be logged.",
-    Command.CallRealtimeAPI: "/{} method JSON: call a realtime API method. Result will be logged."
+    Command.CallRealtimeAPI: "/{} method JSON: call a realtime API method. Result will be logged.",
+    Command.UploadFile: "/{} [--thread #MSGSPEC] path description message: "
+                        "upload a local file, optionally to a specific thread."
 }
 
 HIDDEN_COMMANDS = set([
@@ -140,6 +143,8 @@ class _CompletionContext:
         if self.prefix == self.line and quotechar:
             self.prefix = self.line[:-1]
 
+        self.is_file_completion = False
+
     def setCandidates(self, candidates):
         self.candidates = candidates
 
@@ -189,7 +194,8 @@ class Parser:
             Command.SetUserStatus: self._getUserStatusCompletionCandidates,
             Command.Help: self._getHelpCompletionCandidates,
             Command.JoinChannel: self._getChannelCompletionCandidates,
-            Command.SetReaction: self._getReactionCompletionCandidates
+            Command.SetReaction: self._getReactionCompletionCandidates,
+            Command.UploadFile: self._getFileCompletionCandidates
         }
 
         if self.m_global_objects.cmd_args.no_hidden_commands:
@@ -350,9 +356,10 @@ class Parser:
         ret = context.prefix + new_word
 
         if len(context.candidates) == 1 and not ret.endswith(' '):
-            # if this is the only possible completion also add
-            # whitespace to allow adding another word right away
-            ret += " "
+            if not context.is_file_completion or not ret.endswith(os.path.sep):
+                # if this is the only possible completion also add whitespace
+                # to allow adding another word right away
+                ret += " "
 
         return ret
 
@@ -467,6 +474,58 @@ class Parser:
 
         if emoji.startswith(operator):
             candidates = [operator + cand for cand in candidates]
+
+        return candidates
+
+    def _getFileCompletionCandidates(self, context):
+        """Performs file name completion for the /upload command."""
+        if context.argindex == 2 and context.args[0] == "--thread":
+            # /upload --thread tmid /file
+            pass
+        elif context.argindex == 0:
+            # /upload /file
+            pass
+        else:
+            return []
+
+        # this tells the word completion algorithm not to automatically append
+        # a space for completed directory components.
+        context.is_file_completion = True
+
+        # expand possible ~ tilde occurences
+        word = os.path.expanduser(context.word)
+
+        # find out the directory we need to look into
+        endsep = word.rfind(os.path.sep)
+        if endsep != -1:
+            searchdir = word[:endsep+1]
+            prefix = word[endsep+1:]
+        else:
+            # the current directory
+            prefix = word
+            searchdir = "."
+
+        try:
+            candidates = os.listdir(searchdir)
+        except Exception:
+            # invalid path or access issues etc.
+            return []
+
+        if prefix:
+            # filter candidates starting with the desired basename prefix
+            candidates = [c for c in candidates if c.startswith(prefix)]
+
+        if searchdir != ".":
+            # rebuild the complete paths
+            candidates = [os.path.join(searchdir, cand) for cand in candidates]
+
+        # add trailing slashes for directory candidates
+        candidates = [c + os.path.sep if os.path.isdir(c) else c for c in candidates]
+
+        if word != context.word:
+            # user expansion occured, so unexpand it again to make the
+            # candidates match the actual prefix on the command line
+            candidates = [c.replace(word, context.word, 1) for c in candidates]
 
         return candidates
 
@@ -1168,3 +1227,32 @@ class Parser:
         ))
 
         return "Performed realtime API method call {}".format(method)
+
+    def _handleUpload(self, args):
+
+        if len(args) not in (3, 5):
+            return "expected at least three parameters. Example: "\
+                    "/upload /etc/issue \"my issue file\" \"what do you think of my issue?\""
+
+        if len(args) == 5:
+            if args.pop(0) != "--thread":
+                return "expected '--thread' as first parameter"
+            msg_nr = args.pop(0)
+            thread_id = self._getMsgObjFromNr(msg_nr)
+        else:
+            thread_id = None
+
+        path, description, message = args
+
+        # epxand possible tilde component
+        path = os.path.expanduser(path)
+
+        self.m_comm.uploadFileMessage(
+                self.m_controller.getSelectedRoom(),
+                path,
+                message,
+                description,
+                thread_id=thread_id
+        )
+
+        return "Uploaded file {}".format(path)

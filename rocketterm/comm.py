@@ -445,6 +445,29 @@ class RocketComm:
         """Delete the message represented by the given RoomMessage object."""
         self.m_rt_session.deleteMessage(msg.getID())
 
+    def uploadFileMessage(self, room, path, message=None, description=None,
+                          filename=None, thread_id=None):
+        """Upload a file attachment to the given room.
+
+        :param room: The Room object where to post the file upload.
+        :param str path: The local file path to upload.
+        :param str message: An optional message text to add.
+        :param str description: An optional file description to add.
+        :param str filename: An optional explicit filename to give the uploaded file.
+        :param str thread_id: An optional thread RoomMessage object to attach the file to.
+        """
+        if thread_id:
+            # if this is a thread child message then use the parent thread ID,
+            # otherwise the message's own ID.
+            parent = thread_id.getThreadParent()
+            thread_id = parent if parent else thread_id.getID()
+
+        return self.m_rest_session.uploadFileMessage(
+                room.getID(), path, filename,
+                message, description,
+                thread_id
+        )
+
     def getUserInfoByID(self, uid):
         """Retrieves a UserInfo structure for the given user ID from the
         server."""
