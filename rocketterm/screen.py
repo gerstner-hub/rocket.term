@@ -1271,10 +1271,10 @@ class Screen:
         self.m_logger.debug("Scrolling to {}".format(curpos))
         self.m_chat_box.set_focus(curpos)
 
-    def _setStatusMessage(self, msg):
+    def _setStatusMessage(self, msg, attention=False):
         """Sets a new status message in the status box."""
         self._clearStatusMessages()
-        text = urwid.Text(('text', msg))
+        text = urwid.Text(('attention_text' if attention else 'text', msg))
         self.m_status_box.body.append(text)
 
     def _clearStatusMessages(self):
@@ -1549,6 +1549,10 @@ class Screen:
         )
         self._setStatusMessage(feedback)
         self.m_loop.draw_screen()
+
+    def lostConnection(self):
+        self._setStatusMessage("Connection to remote server API lost", attention=True)
+        self.refresh()
 
     def getChannelsInProgress(self, so_far, total):
         """Called by the controller when time intensive room list loads are in

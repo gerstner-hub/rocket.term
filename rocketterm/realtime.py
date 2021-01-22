@@ -86,6 +86,7 @@ class RealtimeSession:
         # synchronization object for dealing with asynchronous replies
         # received from the websocket run loop
         self.m_condition = threading.Condition()
+        self.m_error_cb = None
 
     def _wsMessage(self, message):
         """Called when a new websocket message is received.
@@ -124,16 +125,22 @@ class RealtimeSession:
     def _wsClose(self):
         """Called when the websocket connection was closed locally or by the
         peer."""
+
         with self.m_condition:
             if not self.m_open or not self.m_wait_for_close:
                 self.m_logger.error("API closed unexpectedly")
+                call_error_cb = True
             else:
                 self.m_logger.debug("API closed")
+                call_error_cb = False
 
             self.m_wait_for_close = False
             self.m_open = False
             self.m_connected = False
             self.m_condition.notify()
+
+        if call_error_cb and self.m_error_cb:
+            self.m_error_cb()
 
     def _wsOpen(self):
         """Called when the websocket connection has been successfully
@@ -309,6 +316,14 @@ class RealtimeSession:
                 import traceback
                 et = traceback.format_exc()
                 self.m_logger.error("Subscription callback failed: {}\n{}\n".format(str(e), et))
+
+    def setErrorCallback(self, callback):
+        """Sets a callback function that will be called if the connection to
+        the API is lost unexpectedly.
+
+        The callback will receive no parameters.
+        """
+        self.m_error_cb = callback
 
     def request(self, data):
         """Sends the given request to the server.

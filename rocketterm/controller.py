@@ -163,6 +163,10 @@ class Controller:
 
         self._fetchRoomInfo()
         self.m_started = True
+        self.m_comm.setErrorCallback(self.lostAPIConnection)
+
+    def lostAPIConnection(self):
+        self.m_callbacks.lostConnection()
 
     def stop(self):
         """Stops the controller runtime operation.

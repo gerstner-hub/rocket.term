@@ -103,6 +103,17 @@ class RocketComm:
 
         return ret
 
+    def setErrorCallback(self, callback):
+        """Register a callback function that will be called if the API
+        connection is lost."""
+
+        def callbackForwarder(cb):
+            cb()
+
+        import functools
+        rt_cb = functools.partial(callbackForwarder, cb=callback)
+        self.m_rt_session.setErrorCallback(rt_cb)
+
     def connect(self):
         """Connect to the RC APIs.
 
