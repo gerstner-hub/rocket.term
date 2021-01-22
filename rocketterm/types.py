@@ -128,6 +128,9 @@ class RoomBase(_RoomTypeMixin):
     def setSubscription(self, ss):
         self.m_subscription = ss
 
+    def isSubscribed(self):
+        return self.m_subscription is not None
+
     def getLabel(self):
         return self.typePrefix() + self.getName()
 
@@ -867,6 +870,22 @@ class RoomMessage:
         starrers = self.m_data.get("starred", [])
 
         return [starrer['_id'] for starrer in starrers]
+
+    def getDiscussionCount(self):
+        """Returns the number of discussion messages for a DiscussionCreated
+        message."""
+        if not self.getMessageType() == MessageType.DiscussionCreated:
+            raise Exception("Not a discussion type message")
+
+        return self.m_data.get("dcount")
+
+    def getDiscussionLastModified(self):
+        """Returns a datetime object representing the last modification time
+        of the discussion."""
+        if not self.getMessageType() == MessageType.DiscussionCreated:
+            raise Exception("Not a discussion type message")
+
+        return rcTimeToDatetime(self.m_data["dlm"]["$date"])
 
 
 class EmojiInfo:

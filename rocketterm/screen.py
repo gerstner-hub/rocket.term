@@ -576,11 +576,11 @@ class Screen:
 
     def _formatUpdateMessage(self, new_msg):
         old_msg = new_msg.getOldMessage()
+        MessageType = rocketterm.types.MessageType
 
         if not old_msg:
             return "update of uncached message -> unable to determine what changed"
         elif new_msg.getMessageType() != old_msg.getMessageType():
-            MessageType = rocketterm.types.MessageType
             if new_msg.getMessageType() == MessageType.MessageRemoved:
                 return rocketterm.utils.getMessageRemoveContext(new_msg)
             else:
@@ -588,6 +588,11 @@ class Screen:
                     old_msg.getRaw(), new_msg.getRaw()
                 ))
                 return "unknown message type change"
+        elif new_msg.getMessageType() == MessageType.DiscussionCreated:
+            return "new messages in discussion '{}': now {} messages".format(
+                    new_msg.getMessage(),
+                    new_msg.getDiscussionCount()
+            )
         elif new_msg.wasEdited() and new_msg.getEditTime() != old_msg.getEditTime():
             ret = rocketterm.utils.getMessageEditContext(new_msg)
             if old_msg.getURLs() != new_msg.getURLs():
@@ -1368,6 +1373,31 @@ class Screen:
         row_nr = self._getMsgRowNr(msg_nrs[0])
         new_text = self._formatChatMessage(new_msg, msg_nrs[0])
         self.m_chat_box.body[row_nr] = new_text
+
+    def handleDiscussionActivity(self, old_msg, new_msg):
+        """Process a discussion activity update.
+
+        This callback function returns a boolean whether the activity should
+        result in an update message passed on by the Controller or not.
+        """
+
+        info = self.m_controller.getRoomInfoByID(old_msg.getRoomID())
+
+        if info.isSubscribed() and info.isOpen():
+            # we're monitoring the discussion anyway, no need to produce
+            # additional noise
+            return False
+        elif old_msg.getDiscussionCount() == new_msg.getDiscussionCount():
+            # not even new messages available so do nothing
+            return False
+
+        difftime = new_msg.getDiscussionLastModified() - old_msg.getDiscussionLastModified()
+
+        if difftime.total_seconds() < 600:
+            # avoid too frequent updates about discussion activity
+            return False
+
+        return True
 
     def handleNewRoomMessage(self, msg):
         """Called by the Controller when in a new message appeared in one of

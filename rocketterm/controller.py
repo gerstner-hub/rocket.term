@@ -712,6 +712,7 @@ class Controller:
         ignored from processing."""
 
         newest = self._getNewestMessage(room_msgs)
+        MessageType = rocketterm.types.MessageType
 
         # if the update wasn't applied yet on the server side, ignore this.
         # This happens e.g. when new reactions are added, then multiple
@@ -722,6 +723,10 @@ class Controller:
         elif old_msg and old_msg.getNumReplies() != new_msg.getNumReplies():
             self.m_callbacks.handleThreadActivity(old_msg, new_msg)
             return True
+        elif old_msg and old_msg.getMessageType() == MessageType.DiscussionCreated:
+            # this means that a discussion sub-room has new messages
+            handle_it = self.m_callbacks.handleDiscussionActivity(old_msg, new_msg)
+            return not handle_it
 
         return False
 
