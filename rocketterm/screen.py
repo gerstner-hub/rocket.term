@@ -771,14 +771,17 @@ class Screen:
         elif _type in (
                 MessageType.RoomChangedTopic,
                 MessageType.RoomChangedDescription,
-                MessageType.RoomChangedAnnouncement
+                MessageType.RoomChangedAnnouncement,
+                MessageType.RoomChangedAvatar,
         ):
             if _type == MessageType.RoomChangedTopic:
                 prefix = "Topic"
             elif _type == MessageType.RoomChangedDescription:
                 prefix = "Description"
-            else:
+            elif _type == MessageType.RoomChangedAnnouncement:
                 prefix = "Announcement"
+            else:
+                prefix = "Avatar"
 
             return "[{} of the {} changed]: {}".format(
                 prefix, room.typeLabel(), raw_message

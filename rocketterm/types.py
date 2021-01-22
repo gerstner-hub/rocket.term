@@ -689,6 +689,7 @@ class MessageType(Enum):
     RoomChangedDescription = "room_changed_description"
     RoomChangedPrivacy = "room_changed_privacy"
     RoomChangedAnnouncement = "room_changed_announcement"
+    RoomChangedAvatar = "room_changed_avatar"
     # unclear what this is, maybe only for the livechat extension
     # ('connected', 'promptTransscript', ...)
     Command = "command"
