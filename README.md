@@ -188,6 +188,24 @@ follows the following format:
   handled this way, the third column of each message is the optional thread
   root message #nr.
 
+### Opening URLs
+
+URLs in chat messages are treated specially by the Rocket.Chat server. It
+tries to obtain additional metadata about a website and displays it in a
+follow-up chat message. This can include the author name, the page title or
+a page excerpt.
+
+Indepentenly of any available metadata, rocket.term supports opening URLs via
+the `/urlopen [URLSPEC]` command. Each URL encountered in a chat room will be
+assigned a unique number like `[12]`. To open it the command `/urlopen [12]`
+can be used. The URL will be opened in the browser specified in the `BROWSER`
+environment variable. Currently the browser will be executed in the
+foreground. This means that rocket.term will be unavailable until you close
+the browser. If the browser runs in the terminal and rocket.term will attempt
+to restore the original terminal settings and redraw itself. You can also
+point `BROWSER` to a program that continues running in the background to keep
+rocket.term available while you are looking at the URL.
+
 ### Entering Commands
 
 Any normal text entered will be posted verbatim as a new chat message. You can

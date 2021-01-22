@@ -36,7 +36,8 @@ class Screen:
         ('border', 'light magenta', 'white', '', 'g38', '#808'),
         ('topic_bar', 'brown', 'dark green', '', 'g38', '#808'),
         ('date_bar', 'white', 'dark gray', '', 'g38', '#808'),
-        ('input', 'white', 'black')
+        ('input', 'white', 'black'),
+        ('link_id', 'light green', 'black')
     )
 
     cycle_colors = (
@@ -1068,7 +1069,10 @@ class Screen:
         be treated as normal text.
         """
 
-        if len(word) > 1 and word.startswith('@'):
+        length = len(word)
+
+        # check for @username mentionings
+        if length > 1 and word.startswith('@'):
             # remove any suffix characters that aren't part of the username
             rest = ""
             while word and not word[-1].isalnum():
@@ -1084,7 +1088,8 @@ class Screen:
             #     return None
             attr = urwid.AttrSpec(self._getUserColor(word[1:]), 'black')
             return (attr, word), rest
-        elif len(word) > 2 and word.startswith(':'):
+        # check for :reactions:
+        elif length > 2 and word.startswith(':') and word[2:].find(':') != -1:
             # remove any suffix characters that aren't part of the reaction
             end = word.find(':', 1)
             if end <= 1:
@@ -1097,6 +1102,13 @@ class Screen:
             from rocketterm.emojis import ALL_EMOJIES
             if emoji in ALL_EMOJIES:
                 return ("activity_text", word), rest
+        # check for [<num>]: links
+        elif length > 3 and word.startswith('[') and word.endswith(']:'):
+            linknum = word[1:-2]
+            if not linknum.isnumeric():
+                return None
+
+            return ("link_id", word), ""
 
         return None
 
