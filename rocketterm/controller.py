@@ -225,7 +225,13 @@ class Controller:
             self.m_pending_events = []
 
         for cb, args, kwargs in to_process:
-            cb(*args, **kwargs)
+            try:
+                cb(*args, **kwargs)
+            except Exception as e:
+                import traceback
+                et = traceback.format_exc()
+                self.m_logger.error("Event processing failed: {}\n{}\n".format(str(e), et))
+                self.m_callbacks.internalError("event processing failed: " + str(e))
 
     def getSelectedThreadID(self, room=None):
         """Returns the default thread message ID for the given room (or the

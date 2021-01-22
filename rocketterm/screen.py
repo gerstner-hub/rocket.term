@@ -266,28 +266,35 @@ class Screen:
 
         if k == 'meta q':
             raise urwid.ExitMainLoop()
-        elif k == 'meta up':
-            self.m_controller.selectPrevRoom()
-        elif k == 'meta down':
-            self.m_controller.selectNextRoom()
-        elif k == 'page up':
-            self._scrollMessages(ScrollDirection.OLDER)
-        elif k == 'page down':
-            self._scrollMessages(ScrollDirection.NEWER)
-        elif k == "meta page up":
-            self._scrollMessages(ScrollDirection.OLDER, True)
-        elif k == "meta page down":
-            self._scrollMessages(ScrollDirection.NEWER, True)
-        elif k == 'meta end':
-            self._scrollMessages(ScrollDirection.NEWEST)
-        elif k == 'meta home':
-            self._scrollMessages(ScrollDirection.OLDEST)
-        elif k == 'shift up':
-            self._selectActiveRoom(Direction.PREV)
-        elif k == 'shift down':
-            self._selectActiveRoom(Direction.NEXT)
-        else:
-            self.m_logger.debug("Input unhandled")
+
+        try:
+            if k == 'meta up':
+                self.m_controller.selectPrevRoom()
+            elif k == 'meta down':
+                self.m_controller.selectNextRoom()
+            elif k == 'page up':
+                self._scrollMessages(ScrollDirection.OLDER)
+            elif k == 'page down':
+                self._scrollMessages(ScrollDirection.NEWER)
+            elif k == "meta page up":
+                self._scrollMessages(ScrollDirection.OLDER, True)
+            elif k == "meta page down":
+                self._scrollMessages(ScrollDirection.NEWER, True)
+            elif k == 'meta end':
+                self._scrollMessages(ScrollDirection.NEWEST)
+            elif k == 'meta home':
+                self._scrollMessages(ScrollDirection.OLDEST)
+            elif k == 'shift up':
+                self._selectActiveRoom(Direction.PREV)
+            elif k == 'shift down':
+                self._selectActiveRoom(Direction.NEXT)
+            else:
+                self.m_logger.debug("Input unhandled")
+        except Exception as e:
+            import traceback
+            et = traceback.format_exc()
+            self.m_logger.error("Input processing failed: {}\n{}\n".format(str(e), et))
+            self.internalError("input handling failed: " + str(e))
 
     def _refreshRoomState(self, room):
         # XXX consider moving this state handling into the controller
@@ -1589,11 +1596,14 @@ class Screen:
         feedback = "Loading user list from server ({}/{})".format(
             so_far, total
         )
-        self._setStatusMessage(feedback)
-        self.m_loop.draw_screen()
+        self._setStatusMessage(feedback, redraw=True)
 
     def lostConnection(self):
         self._setStatusMessage("Connection to remote server API lost", attention=True)
+        self.refresh()
+
+    def internalError(self, text):
+        self._setStatusMessage("Internal error occured: {}".format(text), attention=True)
         self.refresh()
 
     def getChannelsInProgress(self, so_far, total):
