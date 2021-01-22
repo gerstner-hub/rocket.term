@@ -414,6 +414,15 @@ class Screen:
 
         for nr, msg in enumerate(messages):
             self._addChatMessage(msg, at_end=False)
+            if nr == 0 or (nr % 512) == 0:
+                self._setStatusMessage(
+                    "Processing messages from {} ({}/{})".format(
+                        self.m_current_room.getLabel(),
+                        nr + 1,
+                        len(messages)
+                    ),
+                    redraw=True
+                )
 
         self._resolveMessageReferences()
         self._scrollMessages(ScrollDirection.NEWEST)
@@ -423,6 +432,8 @@ class Screen:
                 len(self.m_waiting_for_msg_refs)
             )
         )
+
+        self._clearStatusMessages()
 
     def _updateRoomHeading(self):
         self.m_chat_frame.contents["header"] = self._getRoomHeading()
@@ -1291,11 +1302,14 @@ class Screen:
         self.m_logger.debug("Scrolling to {}".format(curpos))
         self.m_chat_box.set_focus(curpos)
 
-    def _setStatusMessage(self, msg, attention=False):
+    def _setStatusMessage(self, msg, attention=False, redraw=False):
         """Sets a new status message in the status box."""
         self._clearStatusMessages()
         text = urwid.Text(('attention_text' if attention else 'text', msg))
         self.m_status_box.body.append(text)
+
+        if redraw and self.m_loop_running:
+            self.m_loop.draw_screen()
 
     def _clearStatusMessages(self):
         self.m_status_box.body.clear()
@@ -1552,8 +1566,7 @@ class Screen:
 
     def commandFeedback(self, msg):
 
-        self._setStatusMessage(msg)
-        self.m_loop.draw_screen()
+        self._setStatusMessage(msg, redraw=True)
 
     def loadHistoryStarted(self, room):
         """Called by the controller when time intensive room history loads are
@@ -1573,8 +1586,7 @@ class Screen:
                 room.getLabel(), cur_msgs, "?" if total_msgs == -1 else total_msgs
         )
 
-        self._setStatusMessage(feedback)
-        self.m_loop.draw_screen()
+        self._setStatusMessage(feedback, redraw=True)
 
     def refresh(self):
         """Force redraw of the complete screen."""
@@ -1619,7 +1631,6 @@ class Screen:
                 so_far, "?" if total == -1 else total
         )
         self._setStatusMessage(feedback)
-        self.m_loop.draw_screen()
 
     def mainLoop(self):
         """The urwid main loop that processes UI and Controller events."""
