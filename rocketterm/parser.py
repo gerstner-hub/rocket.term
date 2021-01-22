@@ -186,6 +186,10 @@ class Parser:
             Command.SetReaction: self._getReactionCompletionCandidates
         }
 
+        if self.m_global_objects.cmd_args.no_hidden_commands:
+            global HIDDEN_COMMANDS
+            HIDDEN_COMMANDS = set()
+
     def commandEntered(self, line):
         """Processes the given command input line and executes whatever is
         needed to.

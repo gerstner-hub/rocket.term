@@ -21,6 +21,8 @@ class GlobalObjects:
     comm = None
     screen = None
     log_manager = None
+    # command line arguments as returned from argparse
+    cmd_args = None
 
 
 class RocketTerm:
@@ -55,6 +57,12 @@ class RocketTerm:
                  "Can also be set through the environment variable LOGLEVEL_SET which takes precedence over this "
                  "command line switch.",
             default=""
+        )
+        self.m_parser.add_argument(
+            "--no-hidden-commands",
+            action='store_true',
+            help="Certain internal commands for development purposes are hidden from command completion by default. "
+                 "By passing this switch they will be treated like normal commands.",
         )
         self.m_parser.add_argument(
             "--config",
@@ -189,6 +197,7 @@ class RocketTerm:
     def run(self):
 
         self.parseArgs()
+        self.m_global_objects.cmd_args = self.m_args
         rconfig = rocketterm.config.RocketConfig(self.m_args.config)
         self.m_config = rconfig.getConfig()
         self.m_global_objects.config = self.m_config
