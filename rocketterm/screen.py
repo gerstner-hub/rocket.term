@@ -3,6 +3,7 @@
 from enum import Enum
 import os
 import logging
+import pprint
 
 import urwid
 
@@ -620,8 +621,8 @@ class Screen:
             return self._getChangedURLInfo(old_msg, new_msg)
 
         self.m_logger.warning(
-            "unhandled message update. old = {}, new = {}".format(
-                old_msg.getRaw(), new_msg.getRaw()
+            "unhandled message update.\nold = {}\nnew = {}".format(
+                pprint.pformat(old_msg.getRaw()), pprint.pformat(new_msg.getRaw())
             )
         )
 
