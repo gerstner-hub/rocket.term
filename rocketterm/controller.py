@@ -434,7 +434,10 @@ class Controller:
         on."""
         if self.m_selected_room == room:
             # nothing to do
-            return
+            return True
+        elif not room.isOpen():
+            self.m_logger.warning("Trying to select hidden room {}".format(room.getName()))
+            return False
 
         self.m_selected_room = room
 
@@ -448,16 +451,16 @@ class Controller:
             self._cacheRoomMembers(room)
 
         self.m_callbacks.newRoomSelected()
+        return True
 
     def selectRoomBySpec(self, spec):
-        """Tries to select a room describe by the given label spec
+        """Tries to select a room described by the given label spec
         like $group, #channel or @personal. Returns a boolean
         indicating whether a room matched and was selected."""
 
         for room in self.m_rooms.values():
             if room.matchesRoomSpec(spec):
-                self.selectRoom(room)
-                return True
+                return self.selectRoom(room)
 
         return False
 
