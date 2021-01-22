@@ -724,7 +724,7 @@ class Parser:
         )
 
     def _handleCommands(self, args):
-        return ' '.join([c.value for c in Command if c not in HIDDEN_COMMANDS])
+        return ' '.join(sorted([c.value for c in Command if c not in HIDDEN_COMMANDS]))
 
     def _handleSend(self, args):
         if len(args) != 1:
