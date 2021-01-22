@@ -588,6 +588,8 @@ class Screen:
             return self._getChangedReactionsText(old_msg, new_msg)
         elif old_msg.getStars() != new_msg.getStars():
             return self._getChangedStarsText(old_msg, new_msg)
+        elif old_msg.getURLs() != new_msg.getURLs():
+            return self._getChangedURLInfo(old_msg, new_msg)
 
         self.m_logger.warning(
             "unhandled message update. old = {}, new = {}".format(
@@ -616,6 +618,37 @@ class Screen:
                 changes.append(
                     "{} starred this message".format(info.getUsername())
                 )
+
+        return '\n'.join(changes)
+
+    def _getChangedURLInfo(self, old_msg, new_msg):
+
+        changes = []
+
+        old_urls = old_msg.getURLs()
+        new_urls = new_msg.getURLs()
+
+        if len(old_urls) != len(new_urls):
+            return "number of parsed URLs changed. unsupported."
+
+        for old, new in zip(old_urls, new_urls):
+            old_meta = old.getMeta()
+            new_meta = new.getMeta()
+            if old_meta == new_meta:
+                continue
+
+            if not new_meta.getTitle() and not new_meta.getDescription():
+                continue
+
+            text = "\n[additional information on {}]:".format(new.getURL())
+            if new_meta.getTitle():
+                text += "\ntitle = {}".format(new_meta.getTitle().strip())
+            if new_meta.getDescription():
+                text += "\ndescription = {}".format(new_meta.getDescription().strip())
+            changes.append(text)
+
+        if not changes:
+            changes.append("[unknown changes in URL information]")
 
         return '\n'.join(changes)
 
@@ -691,6 +724,16 @@ class Screen:
                     fi.getMIMEType(),
                     ": {}".format(desc) if desc else ""
                 )
+
+            for url in msg.getURLs():
+                meta = url.getMeta()
+                if not meta or not meta.getTitle():
+                    continue
+
+                text += "\n[URL {} information]:".format(url.getURL())
+                text += "\ntitle = {}".format(meta.getTitle().strip())
+                if meta.getDescription():
+                    text += "\ndescription = {}".format(meta.getDescription().strip())
 
             return text
         elif _type in (MessageType.UserLeft, MessageType.UserJoined):
