@@ -1421,7 +1421,12 @@ class Screen:
                 self._resolveMessageReferences()
                 self._scrollMessages(ScrollDirection.NEWEST)
         else:
-            if self.m_room_states[room_id] == RoomState.ATTENTION:
+            cur_state = self.m_room_states.get(room_id, None)
+
+            if cur_state is None:
+                # room isn't even visible (yet?), so do nothing
+                return
+            elif cur_state == RoomState.ATTENTION:
                 # already on attention, nothing else to do
                 return
             elif self.m_controller.doesMessageMentionUs(msg):
