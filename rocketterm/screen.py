@@ -726,8 +726,8 @@ class Screen:
 
             for reaction, info in msg.getReactions().items():
                 prefixed_users = [rocketterm.types.BasicUserInfo.typePrefix() + user for user in info['usernames']]
-                text += "\n[reacted with {}]: {}".format(
-                    reaction, ', '.join(prefixed_users)
+                text += "\n{} reacted with {}".format(
+                    ', '.join(prefixed_users), reaction
                 )
 
             for starrer in msg.getStars():
