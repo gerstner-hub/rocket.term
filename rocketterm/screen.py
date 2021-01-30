@@ -983,7 +983,7 @@ class Screen:
         self.m_chat_box.body[source_index] = new_text
 
     def _getMaxMsgNrWidth(self):
-        return len(str(self.m_room_msg_count + 1))
+        return len(str(self.m_room_msg_count))
 
     def _wrapText(self, text, width, indent_len):
         import textwrap
