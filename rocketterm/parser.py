@@ -239,7 +239,12 @@ class Parser:
             reason = str(e)
             if not reason:
                 reason = str(type(e))
-            return "{} command failed with: {}".format(cmd.value, reason)
+            ret = "{} command failed with: {}".format(cmd.value, reason)
+            self.m_logger.info(ret)
+            import traceback
+            et = traceback.format_exc()
+            self.m_logger.info(et)
+            return ret
 
     def completeCommand(self, line):
         """Attempts to perform command completion on the given input
