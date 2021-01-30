@@ -1565,7 +1565,8 @@ class Screen:
         self.m_chat_box.set_focus(row_nr)
 
     def commandFeedback(self, msg):
-
+        """Called by the Parser when for status updates of long running
+        commands."""
         self._setStatusMessage(msg, redraw=True)
 
     def loadHistoryStarted(self, room):
