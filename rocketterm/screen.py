@@ -414,7 +414,7 @@ class Screen:
 
         for nr, msg in enumerate(messages):
             self._addChatMessage(msg, at_end=False)
-            if nr == 0 or (nr % 512) == 0:
+            if nr != 0 and (nr % 512) == 0:
                 self._setStatusMessage(
                     "Processing messages from {} ({}/{})".format(
                         self.m_current_room.getLabel(),
