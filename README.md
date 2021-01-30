@@ -206,6 +206,16 @@ to restore the original terminal settings and redraw itself. You can also
 point `BROWSER` to a program that continues running in the background to keep
 rocket.term available while you are looking at the URL.
 
+### Downloading and Uploading Attachments
+
+The `/upload`, `/download` and `/openfile` commands support uploading,
+downloading and opening file attachments. Files are attached to chat messages
+and are identified similarly to URLs with a unique number syntax like `[!4]`.
+
+Similarly to URL open handling the execution of rocket.term will be suspended
+for large file downloads, or if opening downloaded files in external
+applications that run in the foreground.
+
 ### Entering Commands
 
 Any normal text entered will be posted verbatim as a new chat message. You can
