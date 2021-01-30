@@ -852,12 +852,14 @@ class Screen:
         description = meta.getDescription().strip()
         oembed_type = meta.getOEmbedType()
 
-        # don't show header information for HTML website documents, it's too
-        # noisy
-        if headers and not headers.getContentType().startswith("text/html"):
-            _type, _length = headers.getContentType(), headers.getContentLength()
-            if _type:
-                lines += ["type: {}".format(_type)]
+        content_type = headers.getContentType() if headers else None
+        if content_type is None:
+            content_type = ""
+
+        # don't show header information for HTML website documents, it's too noisy
+        if content_type and not content_type.startswith("text/html"):
+            _length = headers.getContentLength()
+            lines += ["type: {}".format(content_type)]
             if _length:
                 kb = int(int(_length) / 1024.0)
                 if kb > 0:
