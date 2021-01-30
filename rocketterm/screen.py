@@ -38,7 +38,8 @@ class Screen:
         ('topic_bar', 'brown', 'dark green', '', 'g38', '#808'),
         ('date_bar', 'white', 'dark gray', '', 'g38', '#808'),
         ('input', 'white', 'black'),
-        ('link_id', 'light green', 'black')
+        ('link_id', 'light green', 'black'),
+        ('file_id', 'brown', 'black')
     )
 
     cycle_colors = (
@@ -384,11 +385,16 @@ class Screen:
         self.m_msg_id_map = {}
         # maps message nrs. to listbox rows
         self.m_msg_nr_row_map = {}
-        # this contains all URLs posted in the room for being able to open
+        # this contains all URLs posted in the room, for being able to open
         # them on user request
         self.m_url_list = []
         # this maps the URL text to the URL index in m_url_list
         self.m_url_map = {}
+        # this contains all file attachments posted in the room, for being
+        # able to open them on user request
+        self.m_file_list = []
+        # this maps a file attachment ID to the file index in m_file_list
+        self.m_file_map = {}
         # offset to add to values stored in m_msg_nr_row_map,
         # see _recordMsgNr() for a detailed explanation
         self.m_row_offset = 0
@@ -755,8 +761,10 @@ class Screen:
 
             if msg.hasFile():
                 fi = msg.getFile()
+                file_nr = self._recordFile(fi)
                 desc = fi.getDescription()
-                text += "\n[file attachment: {} ({})]{}".format(
+                text += "\n[!{}]: file '{}' ({}){}".format(
+                    file_nr,
                     fi.getName(),
                     fi.getMIMEType(),
                     ": {}".format(desc) if desc else ""
@@ -1135,6 +1143,13 @@ class Screen:
             from rocketterm.emojis import ALL_EMOJIES
             if emoji in ALL_EMOJIES:
                 return ("activity_text", word), rest
+        # check for [!<num>]: file attachments
+        elif length > 4 and word.startswith('[!') and word.endswith(']:'):
+            filenum = word[2:-2]
+            if not filenum.isnumeric():
+                return None
+
+            return ("file_id", word), ""
         # check for [<num>]: links
         elif length > 3 and word.startswith('[') and word.endswith(']:'):
             linknum = word[1:-2]
@@ -1361,6 +1376,17 @@ class Screen:
         self.m_url_map[url] = nr
         return nr
 
+    def _recordFile(self, file_info):
+        try:
+            return self.m_file_map[file_info.getID()]
+        except KeyError:
+            pass
+
+        self.m_file_list.append(file_info)
+        nr = len(self.m_file_list)
+        self.m_file_map[file_info.getID()] = nr
+        return nr
+
     def getMsgIDForNr(self, msg_nr):
         """Returns the msg ID for a consecutive msg nr#."""
         return self.m_msg_id_map[msg_nr]
@@ -1544,6 +1570,19 @@ class Screen:
             return
 
         return self.m_url_list[index]
+
+    def getFileInfoForIndex(self, index):
+        """Return the FileInfo the given file [!index] refers to.
+
+        returns None if no such file attachment exists.
+        """
+
+        index -= 1
+
+        if index < 0 or index >= len(self.m_file_list):
+            return
+
+        return self.m_file_list[index]
 
     def scrollToMessage(self, msg_nr):
         """Scrolls the current chat box to the given msg nr#.

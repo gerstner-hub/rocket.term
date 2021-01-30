@@ -8,6 +8,7 @@ import shlex
 import subprocess
 
 import rocketterm.types
+import rocketterm.utils
 
 
 class Command(Enum):
@@ -47,6 +48,8 @@ class Command(Enum):
     CallRestAPIGet = "restget"
     CallRealtimeAPI = "rtapi"
     UploadFile = "upload"
+    DownloadFile = "download"
+    OpenFile = "openfile"
 
 
 # the first format placeholder will receive the actual command name
@@ -88,7 +91,10 @@ USAGE = {
     Command.CallRestAPIGet: "/{} endpoint: issue a raw REST API GET call. Result will be logged.",
     Command.CallRealtimeAPI: "/{} method JSON: call a realtime API method. Result will be logged.",
     Command.UploadFile: "/{} [--thread #MSGSPEC] path description message: "
-                        "upload a local file, optionally to a specific thread."
+                        "upload a local file, optionally to a specific thread.",
+    Command.DownloadFile: "/{} FILESPEC PATH: download a file to a local path.",
+    Command.OpenFile: "/{} FILESPEC PROGRAM: open a file in a program. "
+                      "A local file path will be passed as first parameter."
 }
 
 HIDDEN_COMMANDS = set([
@@ -195,7 +201,9 @@ class Parser:
             Command.Help: self._getHelpCompletionCandidates,
             Command.JoinChannel: self._getChannelCompletionCandidates,
             Command.SetReaction: self._getReactionCompletionCandidates,
-            Command.UploadFile: self._getFileCompletionCandidates
+            Command.UploadFile: self._getFileCompletionCandidates,
+            Command.DownloadFile: self._getFileCompletionCandidates,
+            Command.OpenFile: self._getFileCompletionCandidates
         }
 
         if self.m_global_objects.cmd_args.no_hidden_commands:
@@ -484,12 +492,18 @@ class Parser:
 
     def _getFileCompletionCandidates(self, context):
         """Performs file name completion for the /upload command."""
-        if context.argindex == 2 and context.args[0] == "--thread":
-            # /upload --thread tmid /file
-            pass
-        elif context.argindex == 0:
-            # /upload /file
-            pass
+        if context.command == Command.UploadFile:
+            if context.argindex == 2 and context.args[0] == "--thread":
+                # /upload --thread tmid /file
+                pass
+            elif context.argindex == 0:
+                # /upload /file
+                pass
+            else:
+                return []
+        elif context.command in (Command.DownloadFile, Command.OpenFile):
+            if context.argindex != 1:
+                return []
         else:
             return []
 
@@ -1261,3 +1275,105 @@ class Parser:
         )
 
         return "Uploaded file {}".format(path)
+
+    def _openOutputFile(self, info, path):
+        """Safely opens an output file based on the given user specified path.
+
+        The output path may be modified in case this becomes necessary for
+        safety reasons (e.g. public /tmp directory).
+
+        :return: a tuple of (path, file-like object)
+        """
+
+        path = os.path.expanduser(path)
+        path = path.rstrip(os.path.sep)
+
+        if not os.path.isdir(path):
+            _file = open(path, 'xb')
+            return path, _file
+
+        import stat
+
+        # derive a safe basename from the attachment name
+        base = rocketterm.utils.getSafeFilename(info.getName())
+        is_public_dir = os.stat(path).st_mode & stat.S_IWOTH
+
+        if is_public_dir:
+            _file = rocketterm.utils.openTempFile(
+                base, dir=path, auto_delete=False
+            )
+            return _file.name, _file
+        else:
+            path = os.path.sep.join([path, base])
+            _file = open(path, 'xb')
+            return path, _file
+
+    def _resolveFileSpec(self, arg):
+        filespec = arg
+
+        if len(filespec) < 4 or not filespec[2:-1].isnumeric():
+            raise Exception("invalid FILESPEC syntax. Expected something like '[!4]'")
+
+        filenum = int(filespec[2:-1])
+
+        info = self.m_screen.getFileInfoForIndex(filenum)
+        if not info:
+            raise Exception("Invalid FILESPEC [!{}]. No such file attachment.".format(filenum))
+
+        return info
+
+    def _handleDownload(self, args):
+
+        if len(args) != 2:
+            return "expected two parameters: FILESPEC PATH. Example: /download [!1] ~/myfile.txt"
+
+        info = self._resolveFileSpec(args[0])
+        outpath, outfile = self._openOutputFile(info, args[1])
+
+        try:
+            self.m_comm.downloadFile(info, outfile)
+        except Exception:
+            try:
+                os.remove(outpath)
+            except Exception:
+                pass
+            raise
+        finally:
+            outfile.close()
+
+        return "Saved file {} '{}' as {}".format(args[0], info.getName(), outpath)
+
+    def _handleOpenfile(self, args):
+
+        if len(args) != 2:
+            return "expected two parameters: FILESPEC PROGRAM. Example: /openfile [!1] /usr/bin/vim"
+
+        info = self._resolveFileSpec(args[0])
+
+        prog = args[1]
+
+        if os.path.isabs(prog):
+            if not os.path.isfile(prog):
+                return "Program '{}' does not exist".format(prog)
+        else:
+            import shutil
+            path = shutil.which(prog)
+            if path is None:
+                return "Could not find program '{}'".format(prog)
+
+            prog = path
+
+        outfile = rocketterm.utils.openTempFile(info.getName())
+
+        self.m_comm.downloadFile(info, outfile)
+
+        try:
+            res = subprocess.run([prog, outfile.name], shell=False, close_fds=True)
+        finally:
+            # if this was a terminal app that took over control of graphics then
+            # force redraw of the urwid screen to put everything back in place
+            self.m_screen.refresh()
+
+        return "Opened attachment {} '{}' in {}. Exit code = {}".format(
+            args[0], info.getName(), prog, res.returncode
+        )

@@ -666,3 +666,6 @@ class RocketComm:
     def getMessageByID(self, msg_id):
         msg = self.m_rest_session.getMessage(msg_id)
         return rocketterm.types.RoomMessage(msg['message'])
+
+    def downloadFile(self, file_info, outfile):
+        self.m_rest_session.downloadFile(file_info.getSubURL(), outfile)

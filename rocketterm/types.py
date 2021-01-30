@@ -530,8 +530,11 @@ class ServerURI:
         self.m_rt_scheme = rt_scheme
         self.m_server_name = server_name
 
+    def getURI(self):
+        return "{}{}".format(self.m_rest_scheme, self.m_server_name)
+
     def getREST_URI(self):
-        return "{}{}/api/v1".format(self.m_rest_scheme, self.m_server_name)
+        return "{}/api/v1".format(self.getRESTURI())
 
     def getRealtimeURI(self):
         return "{}{}/websocket".format(self.m_rt_scheme, self.m_server_name)
@@ -636,6 +639,9 @@ class FileInfo:
     def __init__(self, file_data, attachment):
         self.m_file_data = file_data
         self.m_attachment = attachment
+
+    def getRaw(self):
+        return self.m_attachment
 
     def getID(self):
         return self.m_file_data['_id']

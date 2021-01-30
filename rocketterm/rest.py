@@ -462,3 +462,28 @@ class RestSession:
                 files=files,
                 convert_to_json=False
             )
+
+    def downloadFile(self, sub_url, outfile):
+        """Download a file attachment from the server.
+
+        :param str sub_url: the download sub-URL on the server.
+        :param file outpath: a file-like object to write the downloaded data
+                             to. It must be opened in binary mode.
+        """
+
+        url = "{}/{}?download".format(
+            self.m_server_uri.getURI(),
+            sub_url.lstrip('/')
+        )
+
+        with self.m_session.get(
+                url,
+                stream=True,
+                headers=self._getHeaders()
+        ) as r:
+            r.raise_for_status()
+
+            for chunk in r.iter_content(chunk_size=8192):
+                outfile.write(chunk)
+
+            outfile.flush()

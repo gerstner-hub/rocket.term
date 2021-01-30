@@ -159,3 +159,19 @@ def convertHTMLToText(html):
     converter = HTMLToTextConverter()
     converter.feed(html)
     return converter.get_text()
+
+
+def getSafeFilename(basename):
+    ret = basename.replace(' ', '_')
+    ret = "".join(c for c in ret if c.isalnum() or c in "._")
+    return ret
+
+
+def openTempFile(basename, dir=None, auto_delete=True):
+    import os
+    import tempfile
+    basename = getSafeFilename(basename)
+    prefix, suffix = os.path.splitext(basename)
+    return tempfile.NamedTemporaryFile(
+        dir=dir, prefix=prefix, suffix=suffix, delete=auto_delete
+    )
