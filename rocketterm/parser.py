@@ -603,7 +603,7 @@ class Parser:
                     type_prefix=this_prefix
             )
             room_filters.append(type_filter)
-            if command == Command.HideRoom:
+            if command in (Command.HideRoom, Command.SelectRoom):
                 room_filters.append(_filterOpenRooms)
             elif command == Command.OpenRoom:
                 room_filters.append(_filterHiddenRooms)
