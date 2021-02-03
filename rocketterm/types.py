@@ -534,7 +534,7 @@ class ServerURI:
         return "{}{}".format(self.m_rest_scheme, self.m_server_name)
 
     def getREST_URI(self):
-        return "{}/api/v1".format(self.getRESTURI())
+        return "{}/api/v1".format(self.getURI())
 
     def getRealtimeURI(self):
         return "{}{}/websocket".format(self.m_rt_scheme, self.m_server_name)
