@@ -84,6 +84,10 @@ class RestSession:
 
         msg = "-> Request {} {} ".format(call.__name__.upper(), url)
         if headers:
+            headers = copy.deepcopy(headers)
+            if 'X-Auth-Token' in headers:
+                # don't output auth tokens
+                headers['X-Auth-Token'] = self._CENSORED
             entries = ['='.join((key, val)) for key, val in headers.items()]
             msg += "with headers {}".format(', '.join(entries))
         msg += "\n"
