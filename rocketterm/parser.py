@@ -46,6 +46,7 @@ class Command(Enum):
     UrlOpen = "urlopen"
     FetchMessage = "fetchmsg"
     CallRestAPIGet = "restget"
+    CallRestAPIPost = "restpost"
     CallRealtimeAPI = "rtapi"
     UploadFile = "upload"
     DownloadFile = "download"
@@ -90,13 +91,15 @@ USAGE = {
     Command.UrlOpen: "/{} URLSPEC: opens the given URL in the configured browser.",
     Command.FetchMessage: "/{} [MSGID|#MSGSPEC]: explicitly fetch the given message from REST API.",
     Command.CallRestAPIGet: "/{} endpoint: issue a raw REST API GET call. Result will be logged.",
+    Command.CallRestAPIPost: "/{} endpoint data: issue a raw REST API POST call passing the givin data. "
+                             "Result will be logged.",
     Command.CallRealtimeAPI: "/{} method JSON: call a realtime API method. Result will be logged.",
     Command.UploadFile: "/{} [--thread #MSGSPEC] path description message: "
                         "upload a local file, optionally to a specific thread.",
     Command.DownloadFile: "/{} FILESPEC PATH: download a file to a local path.",
     Command.OpenFile: "/{} FILESPEC PROGRAM: open a file in a program. "
                       "A local file path will be passed as first parameter.",
-    Command.ShowUnread: "/{} shows how many unread messages you have in this room"
+    Command.ShowUnread: "/{}: shows how many unread messages you have in this room",
 }
 
 HIDDEN_COMMANDS = set([
@@ -108,6 +111,7 @@ HIDDEN_COMMANDS = set([
     Command.GetServerInfo,
     Command.FetchMessage,
     Command.CallRestAPIGet,
+    Command.CallRestAPIPost,
     Command.CallRealtimeAPI,
     Command.ShowUnread
 ])
@@ -1227,6 +1231,20 @@ class Parser:
         self.m_logger.info("REST GET result for {}: {}".format(args[0], reply))
 
         return "Performed REST GET request {}".format(args[0])
+
+    def _handleRestpost(self, args):
+
+        if len(args) != 2:
+            return "expected two parameters: endpoint and data. "\
+                   "Example: /restpost subscriptions.read '{\"rid\": \"GENERAL\"}'"
+
+        endpoint, data = args
+
+        reply = self.m_comm.callREST_Post(endpoint, data)
+
+        self.m_logger.info(f"REST POST result for {endpoint} with data '{data}': {reply}")
+
+        return f"Performed REST POST request {endpoint}"
 
     def _handleRtapi(self, args):
 

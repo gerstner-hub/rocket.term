@@ -106,6 +106,9 @@ class RocketComm:
     def callREST_Get(self, endpoint):
         return self.m_rest_session._get(endpoint)
 
+    def callREST_Post(self, endpoint, data):
+        return self.m_rest_session._post(endpoint, data, convert_to_json=False)
+
     def callRealtimeMethod(self, method, params):
         return self.m_rt_session.methodCall(method, params)
 
