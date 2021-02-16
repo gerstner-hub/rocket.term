@@ -392,6 +392,11 @@ class RestSession:
 
         return resp["room"]
 
+    def subscriptionsRead(self, rid=None):
+        """marks the given room (any type) as read."""
+
+        self._post("subscriptions.read", data={"rid": rid})
+
     def getChannelList(self, count=50, offset=0):
         """Returns a list of all open chat rooms on the server.
         """

@@ -642,6 +642,11 @@ class RocketComm:
                 e.getErrorText()
             ))
 
+    def markRoomAsRead(self, room):
+        """Marks any unread messages in the given room as read."""
+
+        self.m_rest_session.subscriptionsRead(room.getID())
+
     def getCustomEmojiList(self):
         """Returns a list of EmojiInfo instances representing the known
         custom emojis on the server."""

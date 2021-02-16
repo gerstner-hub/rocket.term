@@ -52,6 +52,7 @@ class Command(Enum):
     DownloadFile = "download"
     OpenFile = "openfile"
     ShowUnread = "unread"
+    MarkAsRead = "markasread"
 
 
 # the first format placeholder will receive the actual command name
@@ -100,6 +101,7 @@ USAGE = {
     Command.OpenFile: "/{} FILESPEC PROGRAM: open a file in a program. "
                       "A local file path will be passed as first parameter.",
     Command.ShowUnread: "/{}: shows how many unread messages you have in this room",
+    Command.MarkAsRead: "/{}: marks any unread messages in the selected room as read"
 }
 
 HIDDEN_COMMANDS = set([
@@ -1423,3 +1425,14 @@ class Parser:
             )
 
         return ret
+
+    def _handleMarkasread(self, args):
+
+        if len(args) != 0:
+            return "expected no parameters"
+
+        room = self.m_controller.getSelectedRoom()
+
+        self.m_comm.markRoomAsRead(room)
+
+        return "Marked room as read"
