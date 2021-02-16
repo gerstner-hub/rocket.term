@@ -50,6 +50,7 @@ class Command(Enum):
     UploadFile = "upload"
     DownloadFile = "download"
     OpenFile = "openfile"
+    ShowUnread = "unread"
 
 
 # the first format placeholder will receive the actual command name
@@ -94,7 +95,8 @@ USAGE = {
                         "upload a local file, optionally to a specific thread.",
     Command.DownloadFile: "/{} FILESPEC PATH: download a file to a local path.",
     Command.OpenFile: "/{} FILESPEC PROGRAM: open a file in a program. "
-                      "A local file path will be passed as first parameter."
+                      "A local file path will be passed as first parameter.",
+    Command.ShowUnread: "/{} shows how many unread messages you have in this room"
 }
 
 HIDDEN_COMMANDS = set([
@@ -106,7 +108,8 @@ HIDDEN_COMMANDS = set([
     Command.GetServerInfo,
     Command.FetchMessage,
     Command.CallRestAPIGet,
-    Command.CallRealtimeAPI
+    Command.CallRealtimeAPI,
+    Command.ShowUnread
 ])
 
 
@@ -1377,3 +1380,28 @@ class Parser:
         return "Opened attachment {} '{}' in {}. Exit code = {}".format(
             args[0], info.getName(), prog, res.returncode
         )
+
+    def _handleUnread(self, args):
+
+        if len(args) != 0:
+            return "expected no parameters"
+
+        room = self.m_controller.getSelectedRoom()
+        subscription = room.getSubscription()
+
+        num_unread = subscription.getUnread()
+        threads = subscription.getUnreadThreads()
+        thread_nrs = []
+        for msg_id in threads:
+            msg_nrs = self.m_screen.getNrsForMsgID(msg_id)
+            nr = msg_nrs[0] if msg_nrs else '?uncached?'
+            thread_nrs.append(f"#{nr}")
+
+        ret = f"{num_unread} unread messages."
+
+        if thread_nrs:
+            ret += " {} unread threads: {}.".format(
+                num_unread, ', '.join(thread_nrs)
+            )
+
+        return ret

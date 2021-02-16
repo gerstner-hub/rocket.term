@@ -102,6 +102,19 @@ class SubscriptionInfo(_RoomTypeMixin):
         open field will determine whether it's been "hidden"."""
         return self.m_data['open']
 
+    def getUnread(self):
+        """Returns the number of unread message the server has recorded for
+        the logged in user in this room.
+
+        The API provides no way to get to know which messages these are,
+        exactly.
+        """
+        return self.m_data.get('unread', 0)
+
+    def getUnreadThreads(self):
+        """Returns a list of IDs of any unread threads."""
+        return self.m_data.get('tunread', [])
+
 
 class RoomBase(_RoomTypeMixin):
     """Base type for all room types."""
