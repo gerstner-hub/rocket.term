@@ -103,7 +103,7 @@ class SubscriptionInfo(_RoomTypeMixin):
         return self.m_data['open']
 
     def getUnread(self):
-        """Returns the number of unread message the server has recorded for
+        """Returns the number of unread messages the server has recorded for
         the logged in user in this room.
 
         The API provides no way to get to know which messages these are,
@@ -114,6 +114,15 @@ class SubscriptionInfo(_RoomTypeMixin):
     def getUnreadThreads(self):
         """Returns a list of IDs of any unread threads."""
         return self.m_data.get('tunread', [])
+
+    def hasUnreadMessages(self):
+        # it looks like unread threads don't count into the unread messages
+        # counter. However there is a bug, see upstream issue #18419, that
+        # unread thread messages cannot be reset even by explicitly marking a
+        # room as read or loading the complete chat history via the rtapi.
+        # Therefore ignore this unread thread message counter for the moment
+        # when dealing with room states.
+        return self.getUnread() > 0
 
 
 class RoomBase(_RoomTypeMixin):

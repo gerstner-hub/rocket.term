@@ -460,6 +460,11 @@ class Controller:
         if room.supportsMembers():
             self._cacheRoomMembers(room)
 
+        if room.getSubscription().hasUnreadMessages():
+            # reading room history seems not enough to reset the unread
+            # messages counter so do it explicitly
+            self.m_comm.markRoomAsRead(room)
+
         self.m_callbacks.newRoomSelected()
         return True
 

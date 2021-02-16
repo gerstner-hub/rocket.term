@@ -309,8 +309,14 @@ class Screen:
             # selected
             self.m_room_states[room.getID()] = RoomState.NORMAL
         else:
-            # populate an initial normal state
-            self.m_room_states.setdefault(room.getID(), RoomState.NORMAL)
+            # populate an initial state
+
+            if room.getSubscription().hasUnreadMessages():
+                state = RoomState.ATTENTION
+            else:
+                state = RoomState.NORMAL
+
+            self.m_room_states.setdefault(room.getID(), state)
 
     def _getRoomColor(self, room):
         room_state_colors = {
