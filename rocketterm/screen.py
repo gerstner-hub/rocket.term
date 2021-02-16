@@ -1,17 +1,20 @@
 # vim: ts=4 et sw=4 sts=4 :
 
-from enum import Enum
-import os
 import logging
+import os
 import pprint
+from enum import Enum
 
-import urwid
-
+# rocket.term
 import rocketterm.controller
-import rocketterm.types
 import rocketterm.parser
+import rocketterm.types
 import rocketterm.utils
 from rocketterm.widgets import CommandInput, SizedListBox
+
+# 3rd party
+import urwid
+
 
 ScrollDirection = Enum('ScrollDirection', "OLDER NEWER NEWEST OLDEST")
 RoomState = Enum('RoomState', "NORMAL ACTIVITY ATTENTION")

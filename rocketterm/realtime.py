@@ -6,11 +6,11 @@ import logging
 import pprint
 import threading
 
-# 3rd party
-import websocket
-
 # rocket.term
 import rocketterm.types
+
+# 3rd party
+import websocket
 
 
 class RealtimeSession:

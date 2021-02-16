@@ -5,13 +5,13 @@ import logging
 import os
 import sys
 
-from rocketterm.comm import RocketComm
-from rocketterm.terminal import printe, print_colored
 import rocketterm.config
+import rocketterm.logmanager
 import rocketterm.screen
 import rocketterm.types
 import rocketterm.utils
-import rocketterm.logmanager
+from rocketterm.comm import RocketComm
+from rocketterm.terminal import print_colored, printe
 
 
 class GlobalObjects:

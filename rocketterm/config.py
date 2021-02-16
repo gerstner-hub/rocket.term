@@ -1,8 +1,8 @@
 # vim: ts=4 et sw=4 sts=4 :
 
 import configparser
-from enum import Enum
 import os
+from enum import Enum
 
 
 class ConfigError(Exception):

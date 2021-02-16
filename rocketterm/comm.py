@@ -3,10 +3,10 @@
 import logging
 
 # rocket.term
-import rocketterm.types
-import rocketterm.utils
 import rocketterm.realtime
 import rocketterm.rest
+import rocketterm.types
+import rocketterm.utils
 
 
 class RocketComm:

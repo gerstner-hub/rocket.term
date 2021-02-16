@@ -1,11 +1,11 @@
 # vim: ts=4 et sw=4 sts=4 :
 
-from enum import Enum
 import functools
 import logging
 import os
 import shlex
 import subprocess
+from enum import Enum
 
 import rocketterm.types
 import rocketterm.utils
