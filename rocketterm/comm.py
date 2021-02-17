@@ -619,6 +619,54 @@ class RocketComm:
 
         return ret
 
+    def inviteUserToRoom(self, room, user):
+        """Invites the user identified by the given UserInfo into the room
+        identified by the given RoomInfo.
+
+        This is not possible for DirectChat rooms.
+
+        "Inviting" in this context means actually adding a user to the room.
+        The user will not have to accept the invitation or anything of the
+        likes.
+        """
+
+        from rocketterm.types import PrivateChat, ChatRoom
+
+        room_types = {
+            PrivateChat: self.m_rest_session.inviteToGroup,
+            ChatRoom: self.m_rest_session.inviteToChannel
+        }
+
+        for _type, fct in room_types.items():
+            if not isinstance(room, _type):
+                continue
+
+            return fct(room.getID(), user.getID())
+        else:
+            raise Exception("unsupported room type to invite user to")
+
+    def kickUserFromRoom(self, room, user):
+        """Removes the user identifier by the given UserInfo from the room
+        identified by the given RoomInfo.
+
+        This is not possible for DirectChat rooms.
+        """
+
+        from rocketterm.types import PrivateChat, ChatRoom
+
+        room_types = {
+            PrivateChat: self.m_rest_session.kickFromGroup,
+            ChatRoom: self.m_rest_session.kickFromChannel
+        }
+
+        for _type, fct in room_types.items():
+            if not isinstance(room, _type):
+                continue
+
+            return fct(room.getID(), user.getID())
+        else:
+            raise Exception("unsupported room type to kick user from")
+
     def createRoom(self, name, initial_users=[]):
         """Creates a new private group or open chat room.
 
@@ -627,9 +675,11 @@ class RocketComm:
         :return str: The room ID of the newly created room object.
         """
 
+        from rocketterm.types import PrivateChat, ChatRoom
+
         room_types = {
-            rocketterm.types.PrivateChat.typePrefix(): self.m_rt_session.createPrivateGroup,
-            rocketterm.types.ChatRoom.typePrefix(): self.m_rt_session.createChannel
+            PrivateChat.typePrefix(): self.m_rt_session.createPrivateGroup,
+            ChatRoom.typePrefix(): self.m_rt_session.createChannel
         }
 
         for prefix, fct in room_types.items():

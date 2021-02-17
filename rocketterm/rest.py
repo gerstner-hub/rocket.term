@@ -375,6 +375,26 @@ class RestSession:
 
         self._post("groups.leave", data={"roomId": rid})
 
+    def inviteToChannel(self, rid, user_id):
+        """Invites another user into the given chat room."""
+
+        self._post("channels.invite", data={"roomId": rid, "userId": user_id})
+
+    def inviteToGroup(self, rid, user_id):
+        """Invites another user into the given private group."""
+
+        self._post("groups.invite", data={"roomId": rid, "userId": user_id})
+
+    def kickFromChannel(self, rid, user_id):
+        """Removes the given user from the given chat room."""
+
+        self._post("channels.kick", data={"roomId": rid, "userId": user_id})
+
+    def kickFromGroup(self, rid, user_id):
+        """Removes the given user from the given private group."""
+
+        self._post("groups.kick", data={"roomId": rid, "userId": user_id})
+
     def getRoomInfo(self, rid=None, room_name=None):
         """Returns a specialization of RoomBase for the given room ID or room
         name.

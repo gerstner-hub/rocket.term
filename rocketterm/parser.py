@@ -55,6 +55,8 @@ class Command(Enum):
     MarkAsRead = "markasread"
     GetRoomRoles = "roles"
     CreateRoom = "createroom"
+    InviteUser = "invite"
+    KickUser = "kick"
 
 
 # the first format placeholder will receive the actual command name
@@ -105,8 +107,10 @@ USAGE = {
     Command.ShowUnread: "/{}: shows how many unread messages you have in this room.",
     Command.MarkAsRead: "/{}: marks any unread messages in the selected room as read.",
     Command.GetRoomRoles: "/{}: retrieve a list of special user roles in the selected room.",
-    Command.CreateRoom: "/{} ROOMSPEC [@user1 ...]: create a new open chat room or private group "
-                        "with optional initial users."
+    Command.CreateRoom: "/{} ROOMSPEC [@USERSPEC ...]: create a new open chat room or private group "
+                        "with optional initial users.",
+    Command.InviteUser: "/{} @USERSPEC: invites the given user into the currently selected room.",
+    Command.KickUser: "/{} @USERSPEC: kicks the given user from the currently selected room."
 }
 
 HIDDEN_COMMANDS = set([
@@ -599,7 +603,8 @@ class Parser:
         )
         expect_user = command in (
             Command.SendMessage, Command.WhoIs, Command.GetUserStatus,
-            Command.ChatWith, Command.ReplyInThread, Command.EditMessage
+            Command.ChatWith, Command.ReplyInThread, Command.EditMessage,
+            Command.KickUser, Command.InviteUser
         )
         arg_indices = {
             Command.ReplyInThread: [1],
@@ -1484,3 +1489,29 @@ class Parser:
         self.m_controller.createRoom(roomspec, users)
 
         return f"Created new room {roomspec}"
+
+    def _handleInvite(self, args):
+
+        if len(args) != 1:
+            return "Expected exactly one USERSPEC argument. Example: '/invite @mybuddy'"
+
+        username = self._checkUsernameArg(args[0])
+        user = self._resolveUsername(username)
+
+        room = self.m_controller.getSelectedRoom()
+        self.m_comm.inviteUserToRoom(room, user)
+
+        return f"Invited {user.getLabel()} into {room.getLabel()}."
+
+    def _handleKick(self, args):
+
+        if len(args) != 1:
+            return "Expected exactly one USERSPEC argument. Example: '/kick @myenemy'"
+
+        username = self._checkUsernameArg(args[0])
+        user = self._resolveUsername(username)
+
+        room = self.m_controller.getSelectedRoom()
+        self.m_comm.kickUserFromRoom(room, user)
+
+        return f"Kicked {user.getLabel()} from {room.getLabel()}."
