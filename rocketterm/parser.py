@@ -54,6 +54,7 @@ class Command(Enum):
     ShowUnread = "unread"
     MarkAsRead = "markasread"
     GetRoomRoles = "roles"
+    CreateRoom = "createroom"
 
 
 # the first format placeholder will receive the actual command name
@@ -103,7 +104,9 @@ USAGE = {
                       "A local file path will be passed as first parameter.",
     Command.ShowUnread: "/{}: shows how many unread messages you have in this room.",
     Command.MarkAsRead: "/{}: marks any unread messages in the selected room as read.",
-    Command.GetRoomRoles: "/{}: retrieve a list of special user roles in the selected room."
+    Command.GetRoomRoles: "/{}: retrieve a list of special user roles in the selected room.",
+    Command.CreateRoom: "/{} ROOMSPEC [@user1 ...]: create a new open chat room or private group "
+                        "with optional initial users."
 }
 
 HIDDEN_COMMANDS = set([
@@ -1457,3 +1460,27 @@ class Parser:
 
         roles = ["{}({})".format(user.getLabel(), ",".join(roles)) for user, roles in roles]
         return " ".join(roles)
+
+    def _handleCreateroom(self, args):
+
+        if len(args) == 0:
+            return "Expected ROOMSPEC argument. Example: '/createroom #mychannel @mybuddy1 @mybuddy2'."
+
+        roomspec = args[0]
+        users = args[1:]
+
+        from rocketterm.types import PrivateChat, ChatRoom, UserInfo
+
+        if roomspec[0] not in (PrivateChat.typePrefix(), ChatRoom.typePrefix()):
+            return f"Invalid ROOMSPEC prefix in {roomspec}. Expected chat room or private group."
+
+        user_prefix = UserInfo.typePrefix()
+
+        for user in users:
+            if not user.startswith(user_prefix):
+                return f"Invalid username {user}. Missing {user_prefix} prefix."
+        users = [user[1:] for user in users]
+
+        self.m_controller.createRoom(roomspec, users)
+
+        return f"Created new room {roomspec}"

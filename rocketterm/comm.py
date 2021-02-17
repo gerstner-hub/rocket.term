@@ -619,6 +619,28 @@ class RocketComm:
 
         return ret
 
+    def createRoom(self, name, initial_users=[]):
+        """Creates a new private group or open chat room.
+
+        :param str name: The name of the new room with type prefix.
+        :param list initial_users: A list of usernames to initially add to the new room.
+        :return str: The room ID of the newly created room object.
+        """
+
+        room_types = {
+            rocketterm.types.PrivateChat.typePrefix(): self.m_rt_session.createPrivateGroup,
+            rocketterm.types.ChatRoom.typePrefix(): self.m_rt_session.createChannel
+        }
+
+        for prefix, fct in room_types.items():
+            if not name.startswith(prefix):
+                continue
+
+            reply = fct(name[1:], initial_users)
+            return reply['result']['rid']
+        else:
+            raise Exception(f"unsupported or missing room type in label {name}")
+
     def leaveRoom(self, room):
         """Removes the logged in users subscription from the given room."""
 

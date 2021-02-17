@@ -643,6 +643,20 @@ class Controller:
         self.m_comm.joinChannel(room)
         self.m_awaited_room = room
 
+    def createRoom(self, room, initial_users):
+        rid = self.m_comm.createRoom(room, initial_users)
+
+        for i in range(20):
+            try:
+                room = self.getRoomInfoByID(rid)
+                self.m_awaited_room = room
+                break
+            except Exception:
+                import time
+                time.sleep(0.5)
+        else:
+            raise Exception("Timed out waiting for new room subscription")
+
     def fetchCustomEmojiData(self, force_refresh=False):
         if not force_refresh and self.m_custom_emoji_list is not None:
             return

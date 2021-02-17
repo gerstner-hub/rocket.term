@@ -687,6 +687,29 @@ class RealtimeSession:
 
         return self.methodCall("createDirectMessage", params)
 
+    def createChannel(self, name, initial_users=[], read_only=False):
+        """Creates a new open channel of the given name.
+
+        :param list initial_users: a list of usernames to be added to the new
+                                   channel.
+        :param bool read_only: whether the new channel should be read-only.
+        """
+
+        params = [name, initial_users, read_only]
+
+        return self.methodCall("createChannel", params)
+
+    def createPrivateGroup(self, name, initial_users=[]):
+        """Creates a new private group of the given name.
+
+        :param list initial_users: a list of usernames to be added to the new
+                                   private group.
+        """
+
+        params = [name, initial_users]
+
+        return self.methodCall("createPrivateGroup", params)
+
     def listCustomEmojis(self):
         """Returns a list of all custom emoji names the server knows about."""
 
