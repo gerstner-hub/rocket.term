@@ -251,11 +251,15 @@ class Parser:
         except rocketterm.types.ActionNotAllowed:
             return "Server responded with 'action now allowed'"
         except rocketterm.types.MethodCallError as e:
-            return "Server responded with '{}'".format(e.reason())
+            return "Server responded with '{}'".format(e.getErrorReason())
         except Exception as e:
             reason = str(e)
             if not reason:
                 reason = str(type(e))
+            try:
+                reason += ": " + e.getErrorReason()
+            except AttributeError:
+                pass
             ret = "{} command failed with: {}".format(cmd.value, reason)
             self.m_logger.info(ret)
             import traceback

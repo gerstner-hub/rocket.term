@@ -15,7 +15,7 @@ class MethodCallError(Exception):
         super().__init__(*args, **kwargs)
         self.m_error = error
 
-    def reason(self):
+    def getErrorReason(self):
         return self.m_error.get('reason', 'unknown')
 
 
@@ -63,7 +63,7 @@ class RESTError(HTTPError):
     def getErrorType(self):
         return self.m_details.get("errorType", None)
 
-    def getErrorText(self):
+    def getErrorReason(self):
         return self.m_details.get("error", None)
 
 

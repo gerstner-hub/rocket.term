@@ -548,7 +548,7 @@ class RocketComm:
         except rocketterm.types.RESTError as e:
             raise Exception("Getting room info for {} failed: {}".format(
                 rid if rid else room_name,
-                e.getErrorText()
+                e.getErrorReason()
             ))
 
         # we don't have any subscription data here, this method is rather for
@@ -617,7 +617,7 @@ class RocketComm:
         except rocketterm.types.RESTError as e:
             raise Exception("Leaving {} failed: {}".format(
                 room.getLabel(),
-                e.getErrorText()
+                e.getErrorReason()
             ))
 
     def eraseRoom(self, room):
@@ -639,7 +639,7 @@ class RocketComm:
         except rocketterm.types.RESTError as e:
             raise Exception("Joining {} failed: {}".format(
                 room.getLabel(),
-                e.getErrorText()
+                e.getErrorReason()
             ))
 
     def markRoomAsRead(self, room):
