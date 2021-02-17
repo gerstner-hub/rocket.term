@@ -31,8 +31,11 @@ Among other things:
   status.
 - Reading and setting room topics.
 - Creating new direct chats with other users.
-- Joining or leaving open chat rooms
-- Leaving private groups (joining them is not yet implemented)
+- Creating new chat rooms or private groups.
+- Joining or leaving open chat rooms.
+- Inviting or removing other users into chat rooms or private groups.
+- Leaving private groups.
+- Uploading and downloading file attachments.
 
 Currently it focuses on the basic chat features. More features are in the
 pipeline.
