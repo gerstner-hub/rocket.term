@@ -569,19 +569,29 @@ class Controller:
         Returns a boolean indicating whether a new room could be selected."""
         return self._selectFromRoomList(-1)
 
-    def selectAnyRoom(self):
+    def selectAnyRoom(self, hint_index=0):
         """Selects any room from the room list, if possible.
 
         This is just to make sure that actually some room is selected (e.g.
-        during startup). Returns a boolean indicator whether actually any room
-        was available to select.
+        during startup or when a room is removed). Returns a boolean indicator
+        whether actually any room was available to select.
+
+        :param int hint_index: an index into the list of joined (visible)
+                               rooms for being able to select a room close to
+                               the old position, which is useful when a room
+                               gets hidden for example.
         """
         joined_rooms = self.getJoinedRooms()
 
         if not joined_rooms:
             return False
 
-        self.selectRoom(joined_rooms[0])
+        if hint_index is None:
+            hint_index = 0
+
+        hint_index = min(hint_index, len(joined_rooms) - 1)
+
+        self.selectRoom(joined_rooms[hint_index])
         return True
 
     def hideRoom(self, room):
@@ -864,6 +874,13 @@ class Controller:
                 self.m_callbacks.newDirectChatUserStatus(status_event)
 
     def _subscriptionChanged(self, room, new_data):
+
+        is_selected_room = self.m_selected_room and \
+            self.m_selected_room.getID() == room.getID()
+
+        if is_selected_room:
+            hint_index = self._getJoinedRoomIndex(room)
+
         # an already known room changed
         old_data = room.getSubscription()
         room.setSubscription(new_data)
@@ -885,8 +902,8 @@ class Controller:
             # room is hidden now
             self.m_callbacks.roomHidden(room)
 
-            if self.m_selected_room.getID() == room.getID():
-                if not self.selectAnyRoom():
+            if is_selected_room:
+                if not self.selectAnyRoom(hint_index):
                     self.m_selected_room = None
                     self.m_callbacks.newRoomSelected()
 
@@ -941,14 +958,26 @@ class Controller:
         self.loadMoreRoomMessages(room)
 
     def _delRoom(self, rid):
+
+        if self.m_selected_room.getID() == rid:
+            hint_index = self._getJoinedRoomIndex(rid)
+
         try:
             sub_id = self.m_room_subscriptions.pop(rid)
             self.m_comm.unsubscribe(sub_id)
         except KeyError:
             self.m_logger.warning("attempt to delete room not yet subscribed to? " + str(rid))
         self.m_rooms.pop(rid)
+
         if self.m_selected_room.getID() == rid:
-            self.selectAnyRoom()
+            self.selectAnyRoom(hint_index)
+
+    def _getJoinedRoomIndex(self, rid):
+        for index, room in enumerate(self.getJoinedRooms()):
+            if room.getID() == rid:
+                return index
+
+        return None
 
     def _fetchRoomInfo(self):
         room_list = self.m_comm.getJoinedRooms()

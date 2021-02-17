@@ -172,7 +172,10 @@ class RoomBase(_RoomTypeMixin):
     def __eq__(self, other):
         if other is None:
             return False
-        return self.getID() == other.getID()
+        elif isinstance(other, str):
+            return self.getID() == other
+        else:
+            return self.getID() == other.getID()
 
     def __ne__(self, other):
         return not self.__eq__(other)
