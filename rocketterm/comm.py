@@ -604,6 +604,21 @@ class RocketComm:
         # necessarily subscribed to all the existing discussions
         return [rocketterm.utils.createRoom(data, None) for data in discussions]
 
+    def getRoomRoles(self, room):
+        """Retrieves a list of tuples of (UserInfo, [roles]) describing the
+        users with special roles in given room.
+
+        There exist various default roles like 'owner' and 'moderator' in
+        rocket chat."""
+
+        ret = []
+        reply = self.m_rt_session.getRoomRoles(room.getID())
+
+        for info in reply['result']:
+            ret.append((rocketterm.types.UserInfo(info['u']), info['roles']))
+
+        return ret
+
     def leaveRoom(self, room):
         """Removes the logged in users subscription from the given room."""
 

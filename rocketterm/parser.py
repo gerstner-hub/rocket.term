@@ -53,6 +53,7 @@ class Command(Enum):
     OpenFile = "openfile"
     ShowUnread = "unread"
     MarkAsRead = "markasread"
+    GetRoomRoles = "roles"
 
 
 # the first format placeholder will receive the actual command name
@@ -100,8 +101,9 @@ USAGE = {
     Command.DownloadFile: "/{} FILESPEC PATH: download a file to a local path.",
     Command.OpenFile: "/{} FILESPEC PROGRAM: open a file in a program. "
                       "A local file path will be passed as first parameter.",
-    Command.ShowUnread: "/{}: shows how many unread messages you have in this room",
-    Command.MarkAsRead: "/{}: marks any unread messages in the selected room as read"
+    Command.ShowUnread: "/{}: shows how many unread messages you have in this room.",
+    Command.MarkAsRead: "/{}: marks any unread messages in the selected room as read.",
+    Command.GetRoomRoles: "/{}: retrieve a list of special user roles in the selected room."
 }
 
 HIDDEN_COMMANDS = set([
@@ -1440,3 +1442,18 @@ class Parser:
         self.m_comm.markRoomAsRead(room)
 
         return "Marked room as read"
+
+    def _handleRoles(self, args):
+
+        if len(args) != 0:
+            return "expected no parameters"
+
+        room = self.m_controller.getSelectedRoom()
+
+        roles = self.m_comm.getRoomRoles(room)
+
+        if not roles:
+            return "no special roles in this room"
+
+        roles = ["{}({})".format(user.getLabel(), ",".join(roles)) for user, roles in roles]
+        return " ".join(roles)

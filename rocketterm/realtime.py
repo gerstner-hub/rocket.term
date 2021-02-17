@@ -607,6 +607,14 @@ class RealtimeSession:
 
         return self.methodCall("loadHistory", params)
 
+    def getRoomRoles(self, rid):
+        """Returns a list of dictionary entries describing special user roles
+        in the given room."""
+
+        params = [rid]
+
+        return self.methodCall("getRoomRoles", params)
+
     def hideRoom(self, rid):
         """Hides the given room ID.
 
