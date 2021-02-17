@@ -731,10 +731,14 @@ class Controller:
         # timestamp.
         if new_msg.getServerTimestamp() <= newest.getServerTimestamp():
             return False
-        elif old_msg and old_msg.getNumReplies() != new_msg.getNumReplies():
+        elif not old_msg:
+            # we cannot really tell since there is no comparison object
+            # existing
+            return True
+        elif old_msg.getNumReplies() != new_msg.getNumReplies():
             self.m_callbacks.handleThreadActivity(old_msg, new_msg)
             return False
-        elif old_msg and old_msg.getMessageType() == MessageType.DiscussionCreated:
+        elif old_msg.getMessageType() == MessageType.DiscussionCreated:
             # this means that a discussion sub-room has new messages
             return self.m_callbacks.handleDiscussionActivity(old_msg, new_msg)
 
