@@ -732,6 +732,7 @@ class RoomMessage:
 
     def __init__(self, data):
         self.m_data = data
+        self.m_old_msg = None
 
     @classmethod
     def createNew(cls, rid, msg, parent_id=None, thread_id=None):
@@ -757,11 +758,11 @@ class RoomMessage:
     def getOldMessage(self):
         """For incremental update messages this returns the original message
         before the update occured."""
-        return self.m_data.get("old_msg", None)
+        return self.m_old_msg
 
     def setIsIncrementalUpdate(self, old_msg):
         self.m_data["incupdate"] = True
-        self.m_data["old_msg"] = old_msg
+        self.m_old_msg = old_msg
 
     def getRaw(self):
         return self.m_data
