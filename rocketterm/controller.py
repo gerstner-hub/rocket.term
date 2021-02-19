@@ -768,15 +768,23 @@ class Controller:
             # this means that a discussion sub-room has new messages
             return self.m_callbacks.handleDiscussionActivity(old_msg, new_msg)
 
-        for key, value in new_msg.getRaw().items():
+        old_json = old_msg.getRaw()
+        new_json = new_msg.getRaw()
+
+        for key, value in new_json.items():
             if key in ('ts', '_updatedAt', 'u'):
                 # sometimes we get updates with resolved usernames, ignore
                 # that. that timestamp fields change is also expected.
                 continue
 
-            if key not in old_msg.getRaw():
+            if key not in old_json:
                 return True
-            elif old_msg.getRaw()[key] != value:
+            elif old_json[key] != value:
+                return True
+
+        for key in old_json:
+            if key not in new_json:
+                # something was removed
                 return True
 
         # nothing interesting changed
