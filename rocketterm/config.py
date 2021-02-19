@@ -112,6 +112,7 @@ class RocketConfig:
 
         self._parseConnectionDetails()
         self._parseDefaults()
+        self._parseHooks()
 
     def _raiseMissingItemError(self, section, setting=None):
         if not setting:
@@ -176,6 +177,23 @@ class RocketConfig:
 
         self.m_config["default_room"] = self.m_parser.get(
                 global_section, "default_room", fallback=None)
+
+    def _parseHooks(self):
+        hook_section = 'hooks'
+
+        hooks = dict()
+        self.m_config["hooks"] = hooks
+
+        if not self.m_parser.has_section(hook_section):
+            return
+
+        for key, value in self.m_parser["hooks"].items():
+            if not key.startswith("on_"):
+                raise ConfigError(f"Invalid hooks setting '{key}'. Should start with 'on_'")
+
+            key = key[3:]
+
+            hooks[key] = value
 
     def getConfig(self):
 

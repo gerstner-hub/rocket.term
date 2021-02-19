@@ -6,6 +6,7 @@ import os
 import sys
 
 import rocketterm.config
+import rocketterm.hookmanager
 import rocketterm.logmanager
 import rocketterm.screen
 import rocketterm.types
@@ -147,8 +148,10 @@ class RocketTerm:
         self.m_global_objects.controller = rocketterm.controller.Controller(self.m_global_objects)
 
     def setupScreen(self):
-
         self.m_global_objects.screen = rocketterm.screen.Screen(self.m_global_objects)
+
+    def setupHookManager(self):
+        self.m_hook_manager = rocketterm.hookmanager.HookManager(self.m_global_objects)
 
     def login(self):
         print("Logging into {} as {}...".format(
@@ -211,6 +214,7 @@ class RocketTerm:
             if self.login():
                 self.setupController()
                 self.setupScreen()
+                self.setupHookManager()
                 self.m_global_objects.screen.mainLoop()
         finally:
             self.teardown()

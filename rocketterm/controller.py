@@ -214,6 +214,11 @@ class Controller:
 
         return False
 
+    def isMessageFromUs(self, msg):
+        """Returns whether the given message was authored by the currently
+        logged in user."""
+        return msg.getUserInfo().getID() == self.m_comm.getUserID()
+
     def processEvents(self):
         """Processes pending asynchronous events in the context of the
         application main thread.
