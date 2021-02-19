@@ -70,10 +70,9 @@ class Screen:
         :param comm: The comm instance to use to talk to the RC server.
         """
         self.m_logger = logging.getLogger("screen")
-        self.m_comm = global_objects.comm
         self.m_global_objects = global_objects
-        self.m_controller = rocketterm.controller.Controller(self, self.m_comm)
-        self.m_global_objects.controller = self.m_controller
+        self.m_comm = global_objects.comm
+        self.m_controller = global_objects.controller
         # this is the chat / command input area
         self.m_cmd_input = CommandInput(self._commandEntered, self._completeCommand)
         # this will display the current room's messages
@@ -1689,6 +1688,7 @@ class Screen:
         self.m_urwid_pipe = self.m_loop.watch_pipe(self._externalEvent)
         self.m_cmd_parser = rocketterm.parser.Parser(self.m_global_objects)
 
+        self.m_controller.addCallbackHandler(self, main_handler=True)
         self.m_controller.start(self._getRows())
         default_room = self.m_global_objects.config["default_room"]
 

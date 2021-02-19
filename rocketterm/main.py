@@ -143,6 +143,9 @@ class RocketTerm:
             print_colored("failed", color='red')
             raise
 
+    def setupController(self):
+        self.m_global_objects.controller = rocketterm.controller.Controller(self.m_global_objects)
+
     def setupScreen(self):
 
         self.m_global_objects.screen = rocketterm.screen.Screen(self.m_global_objects)
@@ -206,6 +209,7 @@ class RocketTerm:
 
         try:
             if self.login():
+                self.setupController()
                 self.setupScreen()
                 self.m_global_objects.screen.mainLoop()
         finally:

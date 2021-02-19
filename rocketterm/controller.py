@@ -23,23 +23,14 @@ class Controller:
     provide pre processed, more abstract information about events.
     """
 
-    def __init__(self, callbacks, comm):
+    def __init__(self, global_objects):
         """
-        :param callbacks: The instance of a callback interface that will
-                          receive event notifications of different kinds. This
-                          is currently not formalized an relies on duck
-                          typing.
-                          Callbacks should be serialized via the
-                          asyncEventOccured() callback member function. This
-                          function should make sure that the application main
-                          thread calls procesEvents() to execute the pending
-                          asynchronous events.
-        :param comm: The Comm instance held by the main program which is
-                     needed by the controller to interact with the RC server.
+        :param global_objects: program wide global object instances
         """
 
-        self.m_comm = comm
-        self.m_callbacks = callbacks
+        self.m_comm = global_objects.comm
+        from rocketterm.utils import CallbackMultiplexer
+        self.m_callbacks = CallbackMultiplexer()
         self.m_logger = logging.getLogger("controller")
         self._reset()
 
@@ -111,6 +102,17 @@ class Controller:
         # an instance of ServerInfo containing remote server version info
         self.m_server_info = None
         self.m_started = False
+
+    def addCallbackHandler(self, callback, main_handler=False):
+        """Adds a callback interface that will receive various callbacks when
+        certain events like new messages occur.
+
+        Multiple callback interface can be registered in parallel.
+        """
+        self.m_callbacks.addConsumer(callback, main_handler)
+
+    def delCallbackHandler(self, callback):
+        self.m_callbacks.delConsumer(callback)
 
     def start(self, msg_batch_size):
         """Starts the controller runtime operation.

@@ -26,6 +26,53 @@ class CommandEvaluator:
             raise
 
 
+class CallbackMultiplexer:
+    """A helper class that multiplexes callback invocations to a dynamic list
+    of callback consumers.
+    """
+
+    def __init__(self):
+        # list of actual consumers to forward callbacks to
+        self.m_consumers = []
+        self.m_main_consumer = None
+
+    def addConsumer(self, consumer, main_consumer=False):
+        """add an additional callback consumer.
+
+        :param bool main_consumer: If set then this consumer will be the main
+                                   consumer. This means that its return value
+                                   will determine the overall result of a
+                                   callback. There can only be one main
+                                   consumer.
+        """
+        if main_consumer and self.m_main_consumer:
+            raise Exception("Multiple main consumers added")
+        if main_consumer:
+            self.m_main_consumer = consumer
+        self.m_consumers.append(consumer)
+
+    def delConsumer(self, consumer):
+        self.m_consumers.remove(consumer)
+        if consumer == self.m_main_consumer:
+            self.m_main_consumer = None
+
+    def _invoke(self, *args, **kwargs):
+        method_name = kwargs.pop("method_name")
+
+        for consumer in self.m_consumers:
+            method = getattr(consumer, method_name)
+            this_ret = method(*args, **kwargs)
+
+            if consumer == self.m_main_consumer:
+                ret = this_ret
+
+        return ret if self.m_main_consumer else None
+
+    def __getattr__(self, method_name):
+        import functools
+        return functools.partial(self._invoke, method_name=method_name)
+
+
 def rcTimeToDatetime(rc_time):
     """Converts a rocket chat timestamp into a Python datetime object."""
     import datetime
