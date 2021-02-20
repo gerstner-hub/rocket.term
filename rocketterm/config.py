@@ -2,6 +2,7 @@
 
 import configparser
 import os
+import stat
 from enum import Enum
 
 
@@ -58,7 +59,6 @@ class RocketConfig:
 
         try:
             import shutil
-            import stat
             import sys
             template = pkg_resources.resource_filename("rocketterm", "etc/{}".format(self.DEFAULT_BASENAME))
             shutil.copy(template, outpath)
@@ -80,13 +80,11 @@ class RocketConfig:
 
     def _checkSafeMode(self, info):
 
-        import stat
-
         problems = []
 
         if os.getuid() != info.st_uid:
             problems.append("The file is not owned by your user")
-        if os.getgid() != 0 and os.getgid() != info.st_gid:
+        if os.getgid() != info.st_gid and info.st_gid != 0:
             problems.append("The file group is not your user's main group")
         if (info.st_mode & (stat.S_IROTH | stat.S_IWOTH)) != 0:
             problems.append("The file is world readable/writeable")
