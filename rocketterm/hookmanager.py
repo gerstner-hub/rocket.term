@@ -51,8 +51,18 @@ class HookManager:
 
             # expand possible ~/ home directory elements
             args[0] = os.path.expanduser(args[0])
+
         except Exception as e:
             self.m_logger.warning(f"failed to parse hook {name} command line {cmdline}: {str(e)}.")
+            return
+
+        try:
+            info = os.stat(args[0])
+
+            if not self._checkSafeMode(args[0], info):
+                return
+        except OSError as e:
+            self.m_logger.warn(f"hook executable {args[0]} cannot be found/accessed: {str(e)}.")
             return
 
         self.m_hooks[name].append(args)
@@ -132,6 +142,35 @@ class HookManager:
     def _handleRoomHook(self, hook, room):
         context = self._getRoomContext(hook, room)
         self._executeHooks(hook, context)
+
+    def _checkSafeMode(self, path, info):
+
+        import stat
+
+        problems = []
+
+        is_group_writeable = (info.st_mode & (stat.S_IWGRP)) != 0
+        is_world_writeable = (info.st_mode & (stat.S_IWOTH)) != 0
+
+        # Allow the executable to be owned by ourselves or by the trusted
+        # 'root' user. Other users should not be able to influence which code
+        # we execute.
+        if info.st_uid != 0 and os.getuid() != info.st_uid:
+            problems.append("The file is not owned by root or your own user account")
+        if is_group_writeable and info.st_gid != 0 and os.getgid() != info.st_gid:
+            problems.append("The file is group writeable and the group is not root or your user's main group")
+        if is_world_writeable:
+            problems.append("The file is world writeable")
+
+        if not problems:
+            return True
+
+        self.m_logger.warn(f"Ignoring hook {path}, because its contents can be influenced by other users:")
+
+        for problem in problems:
+            self.m_logger.warn(problem)
+
+        return False
 
     def handleNewRoomMessage(self, msg):
         hook = "new_room_message"
