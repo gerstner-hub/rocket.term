@@ -68,15 +68,20 @@ class Controller:
         # message updates that we included ourselves and are unknown by the
         # server
         self.m_room_msg_count = dict()
-        # room ID -> EventSubscription. holds the individual subscriptions we
-        # register for each subscribed room we have.
-        self.m_room_subscriptions = dict()
+        # room ID -> EventSubscription. holds the individual subscriptions for
+        # new room messages we register for each subscribed and opened room we
+        # have.
+        self.m_room_msg_subscriptions = dict()
         # user ID -> [EventSubscription,...]. Holds the individual
         # user event subscriptions we register for each user we're interested
         # in.
         self.m_user_event_subscriptions = dict()
         # holds the EventSubscription for "logged user" events
         self.m_user_status_subscription = None
+        # room ID -> [EventSubscription,...]. Holds the individual
+        # stream-notify-room subscriptions we register for each room we're
+        # interested in.
+        self.m_room_event_subscriptions = dict()
         # list of pending asynchronous events to be handled from the
         # urwid main thread. Contains tuples of (callback, *args, **kwargs),
         # i.e. the callback to be called and the arguments to be passed to it.
@@ -140,14 +145,14 @@ class Controller:
         # we need to monitor our room memberships and new direct chats
         subscription_callback = functools.partial(
                 self._forwardEventAsync, callback=self._subscriptionEvent)
-        room_callback = functools.partial(
+        room_changed_callback = functools.partial(
                 self._forwardEventAsync, callback=self._roomChangedEvent)
 
         user_subscriptions = self.m_user_event_subscriptions.setdefault(self.m_local_user_info.getID(), [])
 
         for category, cb in (
             ("subscriptions-changed", subscription_callback),
-            ("rooms-changed", room_callback)
+            ("rooms-changed", room_changed_callback)
         ):
             sub_state = self.m_comm.subscribeForUserEvents(
                 category,
@@ -164,6 +169,18 @@ class Controller:
         )
 
         self._fetchRoomInfo()
+
+        # for some reason previously for message deletions a 'rm' message type
+        # was received via regular message subscriptions, but now deleted
+        # messages only appear in this special per-room deleteMessage event.
+        #
+        # also previously deleted messages have still been returned by the
+        # server afterwards as "deleted" but now they completely disappear.
+        #
+        # so let's be prepared for both
+        for room in self.getJoinedRooms():
+            self._subscribeRoomEvents(room)
+
         self.m_started = True
         self.m_comm.setErrorCallback(self.lostAPIConnection)
 
@@ -181,12 +198,16 @@ class Controller:
         if not self.m_started:
             raise Exception("Controller isn't currently started.")
 
-        for subscription in self.m_room_subscriptions.values():
+        for subscription in self.m_room_msg_subscriptions.values():
             self.m_comm.unsubscribe(subscription)
 
-        self.m_room_subscriptions.clear()
+        self.m_room_event_subscriptions.clear()
 
         for subscriptions in self.m_user_event_subscriptions.values():
+            for sub in subscriptions:
+                self.m_comm.unsubscribe(sub)
+
+        for subscriptions in self.m_room_event_subscriptions.values():
             for sub in subscriptions:
                 self.m_comm.unsubscribe(sub)
 
@@ -888,6 +909,38 @@ class Controller:
             if chat.getPeerUserID(self.m_local_user_info) == status_event.getUserID():
                 self.m_callbacks.newDirectChatUserStatus(status_event)
 
+    def _roomMessageDeleted(self, room_id, msg_id):
+        room = self.getRoomInfoByID(room_id)
+        old_msg = self.getMessageFromID(msg_id, room)
+
+        import datetime
+        now = datetime.datetime.now()
+
+        # treat this like a message update to have only a single code path for
+        # this in the implementation of our consumers
+
+        if old_msg:
+            msg = copy.deepcopy(old_msg)
+            msg.setIsIncrementalUpdate(old_msg)
+        else:
+            msg = rocketterm.types.RoomMessage.createNew(room_id, "message was deleted", msg_id)
+            msg.setClientTimestamp(now)
+            msg.setServerTimestamp(now)
+            # claim we removed it, we have no other way to fill in sensible
+            # info
+            msg.setUserInfo(self.m_local_user_info)
+
+        # claim the author itself removed it
+        msg.setEditUser(msg.getRaw()['u'])
+        # claim it is a regular "message removed" message
+        msg.setMessageType(rocketterm.types.MessageType.MessageRemoved)
+        msg.setEditTime(now)
+        # prepend the message so it can be reconstructed later
+        messages = self.m_room_msgs.setdefault(room.getID(), [])
+        messages[0:0] = [msg]
+        self.m_room_msg_count[room.getID()] += 1
+        self.m_callbacks.handleNewRoomMessage(msg)
+
     def _subscriptionChanged(self, room, new_data):
 
         is_selected_room = self.m_selected_room and \
@@ -909,11 +962,13 @@ class Controller:
 
         if new_data.isOpen():
             # room is visible now
+            self._subscribeRoomEvents(room)
             self.m_callbacks.roomOpened(room)
             self._selectRoomIfAwaited(room)
             if not self.m_selected_room:
                 self.selectRoom(room)
         else:
+            self._unsubscribeRoomEvents(room)
             # room is hidden now
             self.m_callbacks.roomHidden(room)
 
@@ -964,7 +1019,7 @@ class Controller:
         # register for new room events
         callback = functools.partial(self._forwardEventAsync, callback=self._newRoomMessage)
         sub_state = self.m_comm.subscribeForRoomMessages(room, callback)
-        self.m_room_subscriptions[room.getID()] = sub_state
+        self.m_room_msg_subscriptions[room.getID()] = sub_state
         self.m_rooms[room.getID()] = room
         # load initial messages for the room. To process room message events
         # in the callback correctly later on we need at least the newest
@@ -978,7 +1033,7 @@ class Controller:
             hint_index = self._getJoinedRoomIndex(rid)
 
         try:
-            sub_id = self.m_room_subscriptions.pop(rid)
+            sub_id = self.m_room_msg_subscriptions.pop(rid)
             self.m_comm.unsubscribe(sub_id)
         except KeyError:
             self.m_logger.warning("attempt to delete room not yet subscribed to? " + str(rid))
@@ -1073,3 +1128,16 @@ class Controller:
 
         self.selectRoom(rooms[new])
         return True
+
+    def _subscribeRoomEvents(self, room):
+        room_msgdeleted_callback = functools.partial(
+                self._forwardEventAsync, callback=self._roomMessageDeleted)
+
+        sub_id = self.m_comm.subscribeForRoomEvents(room, "deleteMessage", room_msgdeleted_callback)
+        sub_list = self.m_room_event_subscriptions.setdefault(room.getID(), [])
+        sub_list.append(sub_id)
+
+    def _unsubscribeRoomEvents(self, room):
+        subscriptions = self.m_room_event_subscriptions.pop(room.getID())
+        for sub in subscriptions:
+            self.m_comm.unsubscribe(sub)

@@ -154,7 +154,7 @@ def getMessageRemoveContext(room_msg):
     remover = room_msg.getEditUser()
     removed_by_self = remover == room_msg.getUserInfo()
 
-    msg = "[message was removed {}on {}]".format(
+    msg = "[a message was removed {}on {}]".format(
         "" if removed_by_self else "by {} ".format(room_msg.getEditUser().getUsername()),
         room_msg.getEditTime().strftime("%x %X")
     )
