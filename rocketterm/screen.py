@@ -190,7 +190,7 @@ class Screen:
         ))
         footer_pile.contents.append((
             urwid.AttrMap(self.m_status_box, 'box'),
-            footer_pile.options(height_type='given', height_amount=1)
+            footer_pile.options(height_type='given', height_amount=2)
         ))
         footer_pile.contents.append((
             urwid.AttrMap(self.m_cmd_input, 'input'),
@@ -1057,36 +1057,6 @@ class Screen:
     def _getMaxMsgNrWidth(self):
         return len(str(self.m_room_msg_count))
 
-    def _wrapText(self, text, width, indent_len):
-        import textwrap
-
-        # the textwrap module is a bit difficult to tune ... we want to
-        # maintain newlines from the original string, but enforce a maximum
-        # line length while prefixing an indentation string to each line
-        # starting from the second one.
-        #
-        # maintaining the original newlines works via `replace_whitespace =
-        # False`, however then we don't get these lines split up in the
-        # result, also existing newlines aren't resetting the line length
-        # calculation, causing early linebreaks to be inserted.
-        #
-        # therefore explicitly split existing newlines to keep them, then
-        # process each line with textwrap.
-
-        indent = (' ' * indent_len)
-
-        orig_lines = text.split('\n')
-        lines = []
-
-        for line in orig_lines:
-            add = textwrap.wrap(line, width=width, replace_whitespace=False)
-            lines.extend(add)
-
-        if len(lines) > 1:
-            lines = lines[0:1] + [indent + line for line in lines[1:]]
-
-        return '\n'.join(lines)
-
     def _formatChatMessage(self, msg, nr):
         """Returns an urwid widget representing the fully formatted chat
         message.
@@ -1110,7 +1080,7 @@ class Screen:
             # handle special message types by creating sensible text to display
             msg_text = self._getMessageText(msg)
 
-        wrapped_text = self._wrapText(msg_text, messagewidth, prefix_len)
+        wrapped_text = rocketterm.utils.wrapText(msg_text, messagewidth, prefix_len)
 
         user_color = self._getUserColor(username)
         parent_color = self._getMsgNrColor(msg, nr)
@@ -1412,6 +1382,7 @@ class Screen:
     def _setStatusMessage(self, msg, attention=False, redraw=False):
         """Sets a new status message in the status box."""
         self._clearStatusMessages()
+        msg = rocketterm.utils.wrapText(msg, self.m_status_box.getNumCols(), 0)
         text = urwid.Text(('attention_text' if attention else 'text', msg))
         self.m_status_box.body.append(text)
 

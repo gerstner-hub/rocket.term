@@ -239,3 +239,34 @@ def getSupportedBackgroundColors():
     # only the first half are supported as background colors
     import urwid
     return urwid.display_common._BASIC_COLORS[:8]
+
+
+def wrapText(text, width, indent_len):
+    import textwrap
+
+    # the textwrap module is a bit difficult to tune ... we want to
+    # maintain newlines from the original string, but enforce a maximum
+    # line length while prefixing an indentation string to each line
+    # starting from the second one.
+    #
+    # maintaining the original newlines works via `replace_whitespace =
+    # False`, however then we don't get these lines split up in the
+    # result, also existing newlines aren't resetting the line length
+    # calculation, causing early linebreaks to be inserted.
+    #
+    # therefore explicitly split existing newlines to keep them, then
+    # process each line with textwrap.
+
+    indent = (' ' * indent_len)
+
+    orig_lines = text.split('\n')
+    lines = []
+
+    for line in orig_lines:
+        add = textwrap.wrap(line, width=width, replace_whitespace=False)
+        lines.extend(add)
+
+    if len(lines) > 1:
+        lines = lines[0:1] + [indent + line for line in lines[1:]]
+
+    return '\n'.join(lines)
