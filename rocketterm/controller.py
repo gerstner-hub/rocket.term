@@ -1105,8 +1105,8 @@ class Controller:
         """Selects a new room from the room list relative to the currently
         selected room.
 
-        :param int offset: Positive of negative integer that determines which
-                           room to select relativ to the currently selected
+        :param int offset: Positive or negative integer that determines which
+                           room to select relative to the currently selected
                            room.
         """
 
