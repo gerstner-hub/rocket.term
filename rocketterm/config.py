@@ -6,6 +6,7 @@ import stat
 from enum import Enum
 
 import rocketterm.utils
+from rocketterm.screen import Screen
 
 
 class ConfigError(Exception):
@@ -116,6 +117,7 @@ class RocketConfig:
         self._parseColors()
         self._parseUserColors()
         self._parsePaletteColors()
+        self._parseKeys()
 
     def _raiseMissingItemError(self, section, setting=None):
         if not setting:
@@ -230,8 +232,6 @@ class RocketConfig:
         if not self.m_parser.has_section(section):
             return
 
-        from rocketterm.screen import Screen
-
         for key, value in self.m_parser[section].items():
             if key not in Screen.DEFAULT_PALETTE:
                 raise ConfigError(
@@ -309,6 +309,23 @@ class RocketConfig:
         bg = self._validateBackgroundColor(key, parts[1])
 
         return fg, bg
+
+    def _parseKeys(self):
+        section = 'keys'
+
+        keys = dict()
+        self.m_config["keys"] = keys
+
+        if not self.m_parser.has_section(section):
+            return
+
+        for key, value in self.m_parser[section].items():
+            if key not in Screen.DEFAULT_KEYMAP:
+                raise ConfigError(
+                    f"Unsupported key configuration item '{key} = {value}' encountered"
+                )
+            label = value.strip().strip('"\'')
+            keys[key] = label
 
     def getConfig(self):
 

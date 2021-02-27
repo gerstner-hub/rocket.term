@@ -11,7 +11,7 @@ class CommandInput(urwid.Edit):
 
     PROMPT = u"> "
 
-    def __init__(self, cmd_callback, complete_callback):
+    def __init__(self, cmd_callback, complete_callback, keymap):
         """
         :param cmd_callback: A callback function to be invoked once a command
                              has been entered. The callback will receive the
@@ -36,6 +36,7 @@ class CommandInput(urwid.Edit):
         # via selectNewerHistoryEntry() later on, without having to actually
         # submit the command.
         self.m_pending_cmd = ""
+        self.m_keymap = keymap
         self.m_next_input_verbatim = False
 
     def addPrompt(self, text):
@@ -134,10 +135,10 @@ class CommandInput(urwid.Edit):
             if new_line:
                 self._replaceText(new_line)
             return None
-        elif key == 'up':
+        elif key == self.m_keymap['cmd_history_older']:
             self._selectOlderHistoryEntry()
             return None
-        elif key == 'down':
+        elif key == self.m_keymap['cmd_history_newer']:
             self._selectNewerHistoryEntry()
             return None
         elif key == 'ctrl v':

@@ -68,6 +68,22 @@ class Screen:
         'light cyan',
     )
 
+    DEFAULT_KEYMAP = {
+        'quit': 'meta q',
+        'next_room': 'meta down',
+        'prev_room': 'meta up',
+        'next_active_room': 'shift down',
+        'prev_active_room': 'shift up',
+        'single_step_history_older': 'meta page up',
+        'single_step_history_newer': 'meta page down',
+        'scroll_history_older': 'page up',
+        'scroll_history_newer': 'page down',
+        'scroll_history_newest': 'meta end',
+        'scroll_history_oldest': 'meta home',
+        'cmd_history_older': 'up',
+        'cmd_history_newer': 'down'
+    }
+
     def __init__(self, global_objects):
         """
         :param dict config: The preprocessed configuration data.
@@ -77,8 +93,9 @@ class Screen:
         self.m_global_objects = global_objects
         self.m_comm = global_objects.comm
         self.m_controller = global_objects.controller
+        self.m_keymap = copy.copy(self.DEFAULT_KEYMAP)
         # this is the chat / command input area
-        self.m_cmd_input = CommandInput(self._commandEntered, self._completeCommand)
+        self.m_cmd_input = CommandInput(self._commandEntered, self._completeCommand, self.m_keymap)
         # this will display the current room's messages
         self.m_chat_box = SizedListBox(urwid.SimpleListWalker([]), size_callback=self._chatBoxResized)
         # this will hold the list of open rooms
@@ -144,9 +161,10 @@ class Screen:
     def _applyConfig(self):
         config = self.m_global_objects.config
 
-        for user, color in config["color.users"]:
+        for user, color in config["color.users"].items():
             self._cacheUserColor(user, color)
         self.m_palette.update(config["color.palette"])
+        self.m_keymap.update(config["keys"])
 
         colors = config["color"]
 
@@ -302,30 +320,32 @@ class Screen:
         self.m_logger.debug("User input received: {}".format(k))
         self._clearStatusMessages()
 
-        if k == 'meta q':
+        keymap = self.m_keymap
+
+        if k == keymap['quit']:
             raise urwid.ExitMainLoop()
 
         try:
-            if k == 'meta up':
+            if k == keymap['prev_room']:
                 self.m_controller.selectPrevRoom()
-            elif k == 'meta down':
+            elif k == keymap['next_room']:
                 self.m_controller.selectNextRoom()
-            elif k == 'page up':
-                self._scrollMessages(ScrollDirection.OLDER)
-            elif k == 'page down':
-                self._scrollMessages(ScrollDirection.NEWER)
-            elif k == "meta page up":
-                self._scrollMessages(ScrollDirection.OLDER, True)
-            elif k == "meta page down":
-                self._scrollMessages(ScrollDirection.NEWER, True)
-            elif k == 'meta end':
-                self._scrollMessages(ScrollDirection.NEWEST)
-            elif k == 'meta home':
-                self._scrollMessages(ScrollDirection.OLDEST)
-            elif k == 'shift up':
+            elif k == keymap['prev_active_room']:
                 self._selectActiveRoom(Direction.PREV)
-            elif k == 'shift down':
+            elif k == keymap['next_active_room']:
                 self._selectActiveRoom(Direction.NEXT)
+            elif k == keymap['scroll_history_older']:
+                self._scrollMessages(ScrollDirection.OLDER)
+            elif k == keymap['scroll_history_newer']:
+                self._scrollMessages(ScrollDirection.NEWER)
+            elif k == keymap['single_step_history_older']:
+                self._scrollMessages(ScrollDirection.OLDER, True)
+            elif k == keymap['single_step_history_newer']:
+                self._scrollMessages(ScrollDirection.NEWER, True)
+            elif k == keymap['scroll_history_oldest']:
+                self._scrollMessages(ScrollDirection.OLDEST)
+            elif k == keymap['scroll_history_newest']:
+                self._scrollMessages(ScrollDirection.NEWEST)
             else:
                 self.m_logger.debug("Input unhandled")
         except Exception as e:
