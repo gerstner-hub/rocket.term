@@ -350,6 +350,9 @@ class BasicUserInfo:
     def getUsername(self):
         return self.m_data["username"]
 
+    def setUsername(self, name):
+        self.m_data["username"] = name
+
     def getLabel(self):
         return self.typePrefix() + self.getUsername()
 
@@ -358,6 +361,12 @@ class BasicUserInfo:
             return self.m_data["name"]
         except KeyError:
             return self.getUsername()
+
+    def setFriendlyName(self, name):
+        self.m_data["name"] = name
+
+    def getRaw(self):
+        return self.m_data
 
     def __eq__(self, other):
         return self.getID() == other.getID()
@@ -796,11 +805,17 @@ class RoomMessage:
     def getClientTimestamp(self):
         return rcTimeToDatetime(self.m_data["ts"]["$date"])
 
+    def setClientTimestamp(self, time):
+        self.m_data["ts"] = {"$date": datetimeToRcTime(time)}
+
     def getServerTimestamp(self):
         """This server timestamp may consider updates like reactions
         etc. so it is not the creation time stamp. Use
         getClientTimestamp() for this."""
         return rcTimeToDatetime(self.m_data["_updatedAt"]["$date"])
+
+    def setServerTimestamp(self, time):
+        self.m_data["_updatedAt"] = {"$date": datetimeToRcTime(time)}
 
     def getCreationTimestamp(self):
         if self.isIncrementalUpdate():
@@ -808,8 +823,14 @@ class RoomMessage:
         else:
             return self.getClientTimestamp()
 
+    def hasUserInfo(self):
+        return "u" in self.m_data
+
     def getUserInfo(self):
         return BasicUserInfo(self.m_data["u"])
+
+    def setUserInfo(self, basic_info):
+        self.m_data["u"] = basic_info.getRaw()
 
     def hasReplies(self):
         return self.getNumReplies() != 0
