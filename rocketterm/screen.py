@@ -116,6 +116,7 @@ class Screen:
         self.m_loop_running = False
         self.m_palette = copy.copy(self.DEFAULT_PALETTE)
         self.m_roombox_pos = WidgetPosition.LEFT
+        self.m_show_roombox = True
 
     def _applyConfig(self):
         config = self.m_global_objects.config
@@ -142,19 +143,24 @@ class Screen:
         if config["roombox_pos"] == "right":
             self.m_roombox_pos = WidgetPosition.RIGHT
 
-    def _getMainFrameColumns(self):
+        if not config["show_roombox"]:
+            self.m_show_roombox = False
+
+    def _getMainFrameColumns(self, show_roombox=True):
 
         chat_col = ('weight', 90, self.m_chat_frame)
-        box_col = ('weight', 10, urwid.AttrMap(self.m_room_box, 'box'))
+        columns = [chat_col]
 
-        if self.m_roombox_pos == WidgetPosition.LEFT:
-            columns = [box_col, chat_col]
-        else:
-            columns = [chat_col, box_col]
+        if show_roombox:
+            box_col = ('weight', 10, urwid.AttrMap(self.m_room_box, 'box'))
+
+            pos = 0 if self.m_roombox_pos == WidgetPosition.LEFT else len(columns)
+            columns.insert(pos, box_col)
 
         # columns for holding the room box and the chat frame 10/90 relation
         # regarding the width
-        return urwid.Columns(columns, min_width=20, dividechars=1)
+        columns = urwid.Columns(columns, min_width=20, dividechars=1)
+        return urwid.AttrMap(columns, 'bar')
 
     def _setupWidgets(self):
 
@@ -164,14 +170,14 @@ class Screen:
             urwid.AttrMap(self.m_chat_box, 'box')
         )
 
-        columns = self._getMainFrameColumns()
+        columns = self._getMainFrameColumns(show_roombox=self.m_show_roombox)
 
         # this will be the main outer frame, containing a heading bar as
         # header (will be generated dynamically in _updateMainHeading()),
         # the columns with room box and chat box as main content and a pile
         # with status box and input box as footer.
         self.m_frame = urwid.Frame(
-            urwid.AttrMap(columns, 'bar'),
+            columns,
             footer=urwid.Pile([]),
             header=None,
             focus_part='footer'
@@ -1743,6 +1749,12 @@ class Screen:
 
     def internalError(self, text):
         self._setStatusMessage("Internal error occured: {}".format(text), attention=True)
+        self.refresh()
+
+    def setRoomBoxVisible(self, visible):
+        columns = self._getMainFrameColumns(show_roombox=visible)
+
+        self.m_frame.contents['body'] = (columns, None)
         self.refresh()
 
     def getChannelsInProgress(self, so_far, total):

@@ -57,6 +57,7 @@ class Command(Enum):
     CreateRoom = "createroom"
     InviteUser = "invite"
     KickUser = "kick"
+    ShowRoomBox = "showroombox"
 
 
 # the first format placeholder will receive the actual command name
@@ -110,7 +111,8 @@ USAGE = {
     Command.CreateRoom: "/{} ROOMSPEC [@USERSPEC ...]: create a new open chat room or private group "
                         "with optional initial users.",
     Command.InviteUser: "/{} @USERSPEC: invites the given user into the currently selected room.",
-    Command.KickUser: "/{} @USERSPEC: kicks the given user from the currently selected room."
+    Command.KickUser: "/{} @USERSPEC: kicks the given user from the currently selected room.",
+    Command.ShowRoomBox: "/{} BOOL: controls the visibility of the room box view."
 }
 
 HIDDEN_COMMANDS = set([
@@ -661,6 +663,17 @@ class Parser:
         candidates = [room for room in room_names if room.startswith(base)]
 
         return candidates
+
+    def _checkBooleanArg(self, arg):
+
+        word = arg.lower().strip()
+
+        if word in ("yes", "true", "1", "on", "enable"):
+            return True
+        elif word in ("no", "false", "0", "off", "disable"):
+            return False
+
+        raise ParseError("Expected boolean argument like 'yes' or 'no'")
 
     def _checkUsernameArg(self, username):
 
@@ -1515,3 +1528,14 @@ class Parser:
         self.m_comm.kickUserFromRoom(room, user)
 
         return f"Kicked {user.getLabel()} from {room.getLabel()}."
+
+    def _handleShowroombox(self, args):
+
+        if len(args) != 1:
+            return "Expected exactly one BOOL argument. Example: '/showroombox off'"
+
+        on_off = self._checkBooleanArg(args[0])
+
+        self.m_screen.setRoomBoxVisible(on_off)
+
+        return f"Switched roombox visibility to {on_off}"

@@ -191,6 +191,22 @@ class RocketConfig:
 
         self.m_config["roombox_pos"] = roombox_pos
 
+        show_roombox = self.m_parser.get(global_section, "show_roombox", fallback="true")
+        show_roombox = self._parseBoolean("show_roombox", show_roombox)
+
+        self.m_config["show_roombox"] = show_roombox
+
+    def _parseBoolean(self, setting, value):
+
+        value = value.lower().strip()
+
+        if value in ("true", "yes", "1", "on"):
+            return True
+        elif value in ("false", "no", "0", "off"):
+            return False
+
+        raise ConfigError(f"Invalid setting {setting}={value}. Expected boolean string like true/false")
+
     def _parseHooks(self):
         hook_section = 'hooks'
 
