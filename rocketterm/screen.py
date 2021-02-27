@@ -20,6 +20,7 @@ import urwid
 ScrollDirection = Enum('ScrollDirection', "OLDER NEWER NEWEST OLDEST")
 RoomState = Enum('RoomState', "NORMAL ACTIVITY ATTENTION")
 Direction = Enum('Direction', "PREV NEXT")
+WidgetPosition = Enum('WidgetPosition', "LEFT RIGHT TOP BOTTOM")
 
 
 class Screen:
@@ -114,6 +115,48 @@ class Screen:
         self.m_dynamic_thread_colors = self.DYNAMIC_COLORS
         self.m_loop_running = False
         self.m_palette = copy.copy(self.DEFAULT_PALETTE)
+        self.m_roombox_pos = WidgetPosition.LEFT
+
+    def _applyConfig(self):
+        config = self.m_global_objects.config
+
+        for user, color in config["color.users"].items():
+            self._cacheUserColor(user, color)
+        self.m_palette.update(config["color.palette"])
+        self.m_keymap.update(config["keys"])
+
+        colors = config["color"]
+
+        if "own_user" in colors:
+            our_user = self.m_comm.getUsername()
+            self._cacheUserColor(our_user, colors["own_user"])
+
+        dynamic_users = colors["dynamic_users"]
+        if dynamic_users:
+            self.m_dynamic_user_colors = dynamic_users
+
+        dynamic_threads = colors["dynamic_threads"]
+        if dynamic_threads:
+            self.m_dynamic_thread_colors = dynamic_threads
+
+        if config["roombox_pos"] == "right":
+            self.m_roombox_pos = WidgetPosition.RIGHT
+
+    def _getMainFrameColumns(self):
+
+        chat_col = ('weight', 90, self.m_chat_frame)
+        box_col = ('weight', 10, urwid.AttrMap(self.m_room_box, 'box'))
+
+        if self.m_roombox_pos == WidgetPosition.LEFT:
+            columns = [box_col, chat_col]
+        else:
+            columns = [chat_col, box_col]
+
+        # columns for holding the room box and the chat frame 10/90 relation
+        # regarding the width
+        return urwid.Columns(columns, min_width=20, dividechars=1)
+
+    def _setupWidgets(self):
 
         # a frame that we use just for its header, which becomes a bar
         # displaying the room topic
@@ -121,16 +164,7 @@ class Screen:
             urwid.AttrMap(self.m_chat_box, 'box')
         )
 
-        # columns for holding the room box and the chat frame 10/90 relation
-        # regarding the width
-        columns = urwid.Columns(
-            [
-                ('weight', 10, urwid.AttrMap(self.m_room_box, 'box')),
-                ('weight', 90, self.m_chat_frame)
-            ],
-            min_width=20,
-            dividechars=1
-        )
+        columns = self._getMainFrameColumns()
 
         # this will be the main outer frame, containing a heading bar as
         # header (will be generated dynamically in _updateMainHeading()),
@@ -157,28 +191,6 @@ class Screen:
             footer_pile.options()
         ))
         footer_pile.focus_position = len(footer_pile.contents) - 1
-
-    def _applyConfig(self):
-        config = self.m_global_objects.config
-
-        for user, color in config["color.users"].items():
-            self._cacheUserColor(user, color)
-        self.m_palette.update(config["color.palette"])
-        self.m_keymap.update(config["keys"])
-
-        colors = config["color"]
-
-        if "own_user" in colors:
-            our_user = self.m_comm.getUsername()
-            self._cacheUserColor(our_user, colors["own_user"])
-
-        dynamic_users = colors["dynamic_users"]
-        if dynamic_users:
-            self.m_dynamic_user_colors = dynamic_users
-
-        dynamic_threads = colors["dynamic_threads"]
-        if dynamic_threads:
-            self.m_dynamic_thread_colors = dynamic_threads
 
     def _getPalette(self):
         # urwid expects an iterable of tuples ('label', 'fg', 'bg', ...)
@@ -1732,6 +1744,7 @@ class Screen:
         """The urwid main loop that processes UI and Controller events."""
 
         self._applyConfig()
+        self._setupWidgets()
 
         self.m_loop = urwid.MainLoop(
             self.m_frame,

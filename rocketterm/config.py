@@ -183,6 +183,14 @@ class RocketConfig:
         self.m_config["default_room"] = self.m_parser.get(
                 global_section, "default_room", fallback=None)
 
+        roombox_pos = self.m_parser.get(global_section, "roombox_position", fallback="left")
+        supported = ("left", "right")
+
+        if roombox_pos not in supported:
+            raise ConfigError(f"Invalid roombox_position setting '{roombox_pos}'. Supported: {' '.join(supported)}")
+
+        self.m_config["roombox_pos"] = roombox_pos
+
     def _parseHooks(self):
         hook_section = 'hooks'
 
