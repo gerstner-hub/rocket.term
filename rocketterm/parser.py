@@ -58,6 +58,7 @@ class Command(Enum):
     InviteUser = "invite"
     KickUser = "kick"
     ShowRoomBox = "showroombox"
+    RoomActivity = "roomactivity"
 
 
 # the first format placeholder will receive the actual command name
@@ -112,7 +113,8 @@ USAGE = {
                         "with optional initial users.",
     Command.InviteUser: "/{} @USERSPEC: invites the given user into the currently selected room.",
     Command.KickUser: "/{} @USERSPEC: kicks the given user from the currently selected room.",
-    Command.ShowRoomBox: "/{} BOOL: controls the visibility of the room box view."
+    Command.ShowRoomBox: "/{} BOOL: controls the visibility of the room box view.",
+    Command.RoomActivity: "/{}: show open rooms with activity or attention status."
 }
 
 HIDDEN_COMMANDS = set([
@@ -1539,3 +1541,31 @@ class Parser:
         self.m_screen.setRoomBoxVisible(on_off)
 
         return f"Switched roombox visibility to {on_off}"
+
+    def _handleRoomactivity(self, args):
+
+        if args:
+            return "Expected no arguments for this command."
+
+        from rocketterm.types import RoomState
+
+        getRoomInfo = self.m_controller.getRoomInfoByID
+
+        states = self.m_screen.getRoomStates()
+        active_rooms = [getRoomInfo(rid) for rid, state in states.items() if state == RoomState.ACTIVITY]
+        attention_rooms = [getRoomInfo(rid) for rid, state in states.items() if state == RoomState.ATTENTION]
+
+        if active_rooms:
+            active = "Rooms with activity: " + ", ".join([room.getLabel() for room in active_rooms])
+        else:
+            active = ""
+
+        if attention_rooms:
+            attention = "Rooms with attention flag: " + ", ".join([room.getLabel() for room in attention_rooms])
+        else:
+            attention = ""
+
+        if active or attention:
+            return '\n'.join((active, attention))
+        else:
+            return 'no rooms with activity or attention flag'

@@ -9,6 +9,9 @@ from enum import Enum
 from rocketterm.utils import datetimeToRcTime, rcTimeToDatetime
 
 
+RoomState = Enum('RoomState', "NORMAL ACTIVITY ATTENTION")
+
+
 class MethodCallError(Exception):
 
     def __init__(self, error, *args, **kwargs):

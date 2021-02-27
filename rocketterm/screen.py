@@ -11,6 +11,7 @@ import rocketterm.controller
 import rocketterm.parser
 import rocketterm.types
 import rocketterm.utils
+from rocketterm.types import RoomState
 from rocketterm.widgets import CommandInput, SizedListBox
 
 # 3rd party
@@ -18,7 +19,6 @@ import urwid
 
 
 ScrollDirection = Enum('ScrollDirection', "OLDER NEWER NEWEST OLDEST")
-RoomState = Enum('RoomState', "NORMAL ACTIVITY ATTENTION")
 Direction = Enum('Direction', "PREV NEXT")
 WidgetPosition = Enum('WidgetPosition', "LEFT RIGHT TOP BOTTOM")
 
@@ -1727,6 +1727,9 @@ class Screen:
 
         self.m_frame.contents['body'] = (columns, None)
         self.refresh()
+
+    def getRoomStates(self):
+        return self.m_room_states
 
     def getChannelsInProgress(self, so_far, total):
         """Called by the controller when time intensive room list loads are in
