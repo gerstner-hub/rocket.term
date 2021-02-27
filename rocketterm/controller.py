@@ -258,8 +258,8 @@ class Controller:
             except Exception as e:
                 import traceback
                 et = traceback.format_exc()
-                self.m_logger.error("Event processing failed: {}\n{}\n".format(str(e), et))
-                self.m_callbacks.internalError("event processing failed: " + str(e))
+                self.m_logger.error("Event processing for {} failed: {}\n{}\n".format(str(cb), str(e), et))
+                self.m_callbacks.internalError("event processing for {} failed: {}".format(str(cb), str(e)))
 
     def getSelectedThreadID(self, room=None):
         """Returns the default thread message ID for the given room (or the
