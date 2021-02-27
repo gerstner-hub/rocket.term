@@ -226,3 +226,16 @@ def openTempFile(basename, dir=None, auto_delete=True):
     return tempfile.NamedTemporaryFile(
         dir=dir, prefix=prefix, suffix=suffix, delete=auto_delete
     )
+
+
+def getSupportedForegroundColors():
+    """Returns a list of supported foreground color names in urwid."""
+    import urwid
+    return urwid.display_common._BASIC_COLORS
+
+
+def getSupportedBackgroundColors():
+    """Returns a list of supported backgroundcolor names in urwid."""
+    # only the first half are supported as background colors
+    import urwid
+    return urwid.display_common._BASIC_COLORS[:8]

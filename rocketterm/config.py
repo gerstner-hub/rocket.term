@@ -5,6 +5,8 @@ import os
 import stat
 from enum import Enum
 
+import rocketterm.utils
+
 
 class ConfigError(Exception):
 
@@ -111,6 +113,8 @@ class RocketConfig:
         self._parseConnectionDetails()
         self._parseDefaults()
         self._parseHooks()
+        self._parseColors()
+        self._parseUserColors()
 
     def _raiseMissingItemError(self, section, setting=None):
         if not setting:
@@ -192,6 +196,65 @@ class RocketConfig:
             key = key[3:]
 
             hooks[key] = value
+
+    def _normalizeColor(self, value):
+        return value.strip().strip('"\'').lower()
+
+    def _parseUserColors(self):
+        section = 'color.users'
+
+        colors = dict()
+        self.m_config["color.users"] = colors
+
+        if not self.m_parser.has_section(section):
+            return
+
+        for key, value in self.m_parser[section].items():
+            color = self._validateForegroundColor(key, value)
+            colors[key] = color
+
+    def _parseColors(self):
+        section = 'color'
+
+        colors = dict()
+        self.m_config["color"] = colors
+
+        dynamic_users = list()
+        colors["dynamic_users"] = dynamic_users
+
+        if not self.m_parser.has_section(section):
+            return
+
+        for key, value in self.m_parser[section].items():
+            if key == "own_user_color":
+                color = self._validateForegroundColor(key, value)
+                colors["own_user"] = color
+            elif key == "dynamic_user_colors":
+                for part in value.split(','):
+                    color = self._validateForegroundColor(key, part)
+                    dynamic_users.append(color)
+            else:
+                raise ConfigError(f"Invalid [{section}] key '{key}'")
+
+    def _validateForegroundColor(self, key, color):
+        fg_colors = rocketterm.utils.getSupportedForegroundColors()
+        color = self._normalizeColor(color)
+        if color in fg_colors:
+            return color
+
+        raise ConfigError(
+            f"Invalid foreground color specification '{key} = {color}'. Supported colors: {', '.join(fg_colors)}"
+        )
+
+    def _validateBackgroundColor(self, key, color):
+        bg_colors = rocketterm.utils.getSupportedBackgroundColors()
+        color = self._normalizeColor(color)
+        if color in bg_colors:
+            return color
+
+        raise ConfigError(
+            f"Invalid background color specification '{key} = {color}'. Supported colors: {', '.join(bg_colors)}"
+        )
 
     def getConfig(self):
 

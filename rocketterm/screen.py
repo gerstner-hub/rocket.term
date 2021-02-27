@@ -45,9 +45,8 @@ class Screen:
         ('file_id', 'brown', 'black')
     )
 
-    cycle_colors = (
-        # 'black',
-        # 'white'
+    # default value for dynamic user and thread colors
+    DYNAMIC_COLORS = (
         'dark red',
         'dark green',
         'brown',
@@ -89,6 +88,7 @@ class Screen:
         self.m_room_states = {}
         # the currently selected room object
         self.m_current_room = None
+        self.m_dynamic_user_colors = self.DYNAMIC_COLORS
         self.m_loop_running = False
 
         # a frame that we use just for its header, which becomes a bar
@@ -142,6 +142,22 @@ class Screen:
             handle_mouse=False
         )
 
+    def _applyConfig(self):
+        config = self.m_global_objects.config
+
+        self.m_user_colors.update(config["color.users"])
+
+        colors = config["color"]
+
+        if "own_user" in colors:
+            our_user = self.m_comm.getUsername()
+            self.m_user_colors[our_user] = colors["own_user"]
+
+        dynamic_users = colors["dynamic_users"]
+
+        if dynamic_users:
+            self.m_dynamic_user_colors = dynamic_users
+
     def _externalEvent(self, data):
         """Called from the urwid main loop when an event was caused by writing
         to the event pipe.
@@ -174,7 +190,7 @@ class Screen:
         except KeyError:
             pass
 
-        user_colors = self.cycle_colors
+        user_colors = self.m_dynamic_user_colors
 
         next_color = user_colors[len(self.m_user_colors) % len(user_colors)]
         self.m_user_colors[user] = next_color
@@ -191,7 +207,7 @@ class Screen:
         """Returns an urwid color name to be used for the given thread
         number."""
 
-        thread_colors = self.cycle_colors
+        thread_colors = self.DYNAMIC_COLORS
         return thread_colors[thread_nr % len(thread_colors)]
 
     def _updateMainHeading(self):
@@ -1688,8 +1704,11 @@ class Screen:
         self.m_urwid_pipe = self.m_loop.watch_pipe(self._externalEvent)
         self.m_cmd_parser = rocketterm.parser.Parser(self.m_global_objects)
 
+        self._applyConfig()
+
         self.m_controller.addCallbackHandler(self, main_handler=True)
         self.m_controller.start(self._getRows())
+
         default_room = self.m_global_objects.config["default_room"]
 
         if default_room:
