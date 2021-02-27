@@ -222,17 +222,27 @@ class RocketConfig:
         dynamic_users = list()
         colors["dynamic_users"] = dynamic_users
 
+        dynamic_threads = list()
+        colors["dynamic_threads"] = dynamic_threads
+
         if not self.m_parser.has_section(section):
             return
+
+        def parseColorList(value):
+            for part in value.split(','):
+                color = self._validateForegroundColor(key, part)
+                yield color
 
         for key, value in self.m_parser[section].items():
             if key == "own_user_color":
                 color = self._validateForegroundColor(key, value)
                 colors["own_user"] = color
             elif key == "dynamic_user_colors":
-                for part in value.split(','):
-                    color = self._validateForegroundColor(key, part)
+                for color in parseColorList(value):
                     dynamic_users.append(color)
+            elif key == "dynamic_thread_colors":
+                for color in parseColorList(value):
+                    dynamic_threads.append(color)
             else:
                 raise ConfigError(f"Invalid [{section}] key '{key}'")
 

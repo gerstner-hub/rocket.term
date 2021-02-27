@@ -89,6 +89,7 @@ class Screen:
         # the currently selected room object
         self.m_current_room = None
         self.m_dynamic_user_colors = self.DYNAMIC_COLORS
+        self.m_dynamic_thread_colors = self.DYNAMIC_COLORS
         self.m_loop_running = False
 
         # a frame that we use just for its header, which becomes a bar
@@ -154,9 +155,12 @@ class Screen:
             self.m_user_colors[our_user] = colors["own_user"]
 
         dynamic_users = colors["dynamic_users"]
-
         if dynamic_users:
             self.m_dynamic_user_colors = dynamic_users
+
+        dynamic_threads = colors["dynamic_threads"]
+        if dynamic_threads:
+            self.m_dynamic_thread_colors = dynamic_threads
 
     def _externalEvent(self, data):
         """Called from the urwid main loop when an event was caused by writing
@@ -207,7 +211,7 @@ class Screen:
         """Returns an urwid color name to be used for the given thread
         number."""
 
-        thread_colors = self.DYNAMIC_COLORS
+        thread_colors = self.m_dynamic_thread_colors
         return thread_colors[thread_nr % len(thread_colors)]
 
     def _updateMainHeading(self):
