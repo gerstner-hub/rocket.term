@@ -37,6 +37,11 @@ class RealtimeSession:
         "user-status"
     )
 
+    ROOM_EVENTS = (
+        "deleteMessage",
+        "typing"
+    )
+
     _CENSORED = "<CENSORED>"
 
     def __init__(self, server_uri):

@@ -54,6 +54,8 @@ class RocketComm:
             self._streamNotifyUserCB(client_cb, collection, event, data)
         elif collection == "stream-notify-logged":
             self._streamNotifyLoggedCB(client_cb, collection, event, data)
+        elif collection == "stream-notify-room":
+            self._streamNotifyRoomCB(client_cb, collection, event, data)
         else:
             raise Exception("Yet unsupported event collection")
 
@@ -88,6 +90,23 @@ class RocketComm:
                 client_cb(collection, event, status_event)
         else:
             raise Exception("Yet unsupported notify-logged event")
+
+    def _streamNotifyRoomCB(self, client_cb, collection, event, data):
+
+        if collection != "stream-notify-room":
+            self.m_logger.warn(f"stream-notify-room CB with unexpected collection {collection}")
+            return
+
+        parts = event.split('/', 1)
+
+        if len(parts) != 2 or parts[1] != "deleteMessage":
+            self.m_logger.warn(f"unsupported stream-notify-room event {event}")
+            return
+
+        # in this room a message got deleted
+        room_id = parts[0]
+
+        client_cb(room_id, data[0]["_id"])
 
     def _getUserInfo(self, resp):
         """Extract user information from API responses and returns a UserInfo
@@ -354,6 +373,32 @@ class RocketComm:
         sub_state = self.m_rt_session.subscribe(
             "stream-notify-user",
             "{}/{}".format(user.getID(), category),
+            self._subscriptionCB
+        )
+        self.m_subscriptions[sub_state.getSubID()] = callback
+        return sub_state
+
+    def subscribeForRoomEvents(self, room, category, callback):
+        """Subscribe for asynchronous notification of events in rooms.
+
+        Currently only the 'deleteMessage' category is supported. For this the
+        callback arguments will be:
+
+        - room_id: the ID of the room where a message was deleted.
+        - msg_id: the ID of the message that was deleted.
+
+        :param str category: The event category so subscribe for, see
+                             RealtimeSession.ROOM_EVENTS.
+        :param str callback: The callback function which will be called upon
+                             an asynchronous event.
+        """
+
+        if category not in self.m_rt_session.ROOM_EVENTS:
+            raise Exception(f"Invalid room event category: {category}")
+
+        sub_state = self.m_rt_session.subscribe(
+            "stream-notify-room",
+            f"{room.getID()}/{category}",
             self._subscriptionCB
         )
         self.m_subscriptions[sub_state.getSubID()] = callback
