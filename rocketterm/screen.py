@@ -1,5 +1,6 @@
 # vim: ts=4 et sw=4 sts=4 :
 
+import copy
 import logging
 import os
 import pprint
@@ -29,20 +30,25 @@ class Screen:
     """
 
     # an urwid palette that allows to reuse common colors for similar UI items.
-    palette = (
-        ('text',            'white',            'black'),
-        ('selected_text',   'white,standout',   'black'),
-        ('activity_text',   'light magenta',    'black'),
-        ('attention_text',  'light red',        'black'),
-        ('bg1',             'black',            'black'),
-        ('bg2',             'light green',      'black'),
-        ('border',          'light magenta',    'white'),
-        ('topic_bar',       'brown',            'dark green'),
-        ('date_bar',        'white',            'dark gray'),
-        ('input',           'white',            'black'),
-        ('link_id',         'light green',      'black'),
-        ('file_id',         'brown',            'black')
-    )
+    DEFAULT_PALETTE = {
+        'text':            ('white',            'black'),
+        'selected_text':   ('white,standout',   'black'),
+        'activity_text':   ('light magenta',    'black'),
+        'attention_text':  ('light red',        'black'),
+        'box':             ('black',            'black'),
+        'bar':             ('light magenta',    'white'),
+        'room_topic':      ('brown',            'dark green'),
+        'date_bar':        ('white',            'dark gray'),
+        'input':           ('white',            'black'),
+        'link_id':         ('light green',      'black'),
+        'file_id':         ('brown',            'black'),
+        # thread IDs use dynamic foreground colors
+        'thread_id':       ('',                 'black'),
+        'user_online':     ('dark green',       'black'),
+        'user_offline':    ('white',            'black'),
+        'user_busy':       ('light red',        'black'),
+        'user_away':       ('yellow',           'black'),
+    }
 
     # default value for dynamic user and thread colors
     DYNAMIC_COLORS = (
@@ -90,18 +96,19 @@ class Screen:
         self.m_dynamic_user_colors = self.DYNAMIC_COLORS
         self.m_dynamic_thread_colors = self.DYNAMIC_COLORS
         self.m_loop_running = False
+        self.m_palette = copy.copy(self.DEFAULT_PALETTE)
 
         # a frame that we use just for its header, which becomes a bar
         # displaying the room topic
         self.m_chat_frame = urwid.Frame(
-            urwid.AttrMap(self.m_chat_box, 'bg1')
+            urwid.AttrMap(self.m_chat_box, 'box')
         )
 
         # columns for holding the room box and the chat frame 10/90 relation
         # regarding the width
         columns = urwid.Columns(
             [
-                ('weight', 10, urwid.AttrMap(self.m_room_box, 'bg1')),
+                ('weight', 10, urwid.AttrMap(self.m_room_box, 'box')),
                 ('weight', 90, self.m_chat_frame)
             ],
             min_width=20,
@@ -113,7 +120,7 @@ class Screen:
         # the columns with room box and chat box as main content and a pile
         # with status box and input box as footer.
         self.m_frame = urwid.Frame(
-            urwid.AttrMap(columns, 'border'),
+            urwid.AttrMap(columns, 'bar'),
             footer=urwid.Pile([]),
             header=None,
             focus_part='footer'
@@ -121,11 +128,11 @@ class Screen:
 
         footer_pile = self.m_frame.contents["footer"][0]
         footer_pile.contents.append((
-            urwid.AttrMap(urwid.Text("Command Input", align='center'), 'border'),
+            urwid.AttrMap(urwid.Text("Command Input", align='center'), 'bar'),
             footer_pile.options()
         ))
         footer_pile.contents.append((
-            urwid.AttrMap(self.m_status_box, 'bg2'),
+            urwid.AttrMap(self.m_status_box, 'box'),
             footer_pile.options(height_type='given', height_amount=1)
         ))
         footer_pile.contents.append((
@@ -134,24 +141,18 @@ class Screen:
         ))
         footer_pile.focus_position = len(footer_pile.contents) - 1
 
-        self.m_loop = urwid.MainLoop(
-            self.m_frame,
-            self.palette,
-            unhandled_input=self._handleInput,
-            # disable mouse handling to support usual copy/paste interaction
-            handle_mouse=False
-        )
-
     def _applyConfig(self):
         config = self.m_global_objects.config
 
-        self.m_user_colors.update(config["color.users"])
+        for user, color in config["color.users"]:
+            self._cacheUserColor(user, color)
+        self.m_palette.update(config["color.palette"])
 
         colors = config["color"]
 
         if "own_user" in colors:
             our_user = self.m_comm.getUsername()
-            self.m_user_colors[our_user] = colors["own_user"]
+            self._cacheUserColor(our_user, colors["own_user"])
 
         dynamic_users = colors["dynamic_users"]
         if dynamic_users:
@@ -160,6 +161,12 @@ class Screen:
         dynamic_threads = colors["dynamic_threads"]
         if dynamic_threads:
             self.m_dynamic_thread_colors = dynamic_threads
+
+    def _getPalette(self):
+        # urwid expects an iterable of tuples ('label', 'fg', 'bg', ...)
+        #
+        # so contstruct this from our dictionary
+        return ((key, value[0], value[1]) for key, value in self.m_palette.items())
 
     def _externalEvent(self, data):
         """Called from the urwid main loop when an event was caused by writing
@@ -196,22 +203,27 @@ class Screen:
         user_colors = self.m_dynamic_user_colors
 
         next_color = user_colors[len(self.m_user_colors) % len(user_colors)]
-        self.m_user_colors[user] = next_color
+        return self._cacheUserColor(user, next_color)
 
-        return next_color
+    def _cacheUserColor(self, user, color):
+        bg = self.m_palette['text'][1]
+        val = urwid.AttrSpec(color, bg)
+        self.m_user_colors[user] = val
+        return val
 
     def _getMsgNrColor(self, msg, nr):
         if msg.getNumReplies() == 0 or msg.isIncrementalUpdate():
             return 'text'
         else:
-            return urwid.AttrSpec(self._getThreadColor(nr), 'black')
+            return self._getThreadColor(nr)
 
     def _getThreadColor(self, thread_nr):
         """Returns an urwid color name to be used for the given thread
         number."""
 
         thread_colors = self.m_dynamic_thread_colors
-        return thread_colors[thread_nr % len(thread_colors)]
+        fg = thread_colors[thread_nr % len(thread_colors)]
+        return urwid.AttrSpec(fg, self.m_palette['thread_id'][1])
 
     def _updateMainHeading(self):
         our_status = self.m_controller.getUserStatus(
@@ -224,7 +236,7 @@ class Screen:
         email = self.m_comm.getEmail()
 
         parts.append((
-            'border',
+            'bar',
             "Rocket.term {}@{} ({}, {}) ".format(
                 self.m_comm.getUsername(),
                 self.m_comm.getServerURI().getServerName(),
@@ -232,20 +244,23 @@ class Screen:
             )
         ))
 
+        user_status_color = self._getUserStatusColor(our_status[0])
+        user_status_color = user_status_color[0], self.m_palette["bar"][1]
+
         parts.append((
-            urwid.AttrSpec(self._getUserStatusColor(our_status[0]), 'white'),
+            urwid.AttrSpec(*user_status_color),
             "[{}]\n".format(our_status[0].value)
         ))
 
         parts.append((
-            'border',
+            'bar',
             "Status Message: {}".format(
                 our_status[1] if our_status[1] else "<no status message>"
             )
         ))
 
         text = urwid.Text(parts, align='center')
-        header = urwid.AttrMap(text, 'border')
+        header = urwid.AttrMap(text, 'bar')
         self.m_frame.set_header(header)
 
     def _commandEntered(self, command):
@@ -351,16 +366,7 @@ class Screen:
         return room_state_colors[state]
 
     def _getUserStatusColor(self, status):
-        UserPresence = rocketterm.types.UserPresence
-
-        status_colors = {
-            UserPresence.Online: 'dark green',
-            UserPresence.Offline: 'white',
-            UserPresence.Busy: 'light red',
-            UserPresence.Away: 'yellow'
-        }
-
-        return status_colors[status]
+        return self.m_palette[f"user_{status.value}"]
 
     def _getRoomPrefixColor(self, room):
         if not room.isDirectChat():
@@ -370,9 +376,10 @@ class Screen:
         peer_uid = room.getPeerUserID(logged_in_user)
         peer_user = self.m_controller.getBasicUserInfoByID(peer_uid)
         status, _ = self.m_controller.getUserStatus(peer_user)
-        color = self._getUserStatusColor(status)
 
-        return urwid.AttrSpec(color, 'black')
+        color = self._getUserStatusColor(status)
+        color = color[0], self.m_palette["box"][1]
+        return urwid.AttrSpec(*color)
 
     def _roomBoxResized(self, widget):
         self._updateRoomBox()
@@ -540,7 +547,7 @@ class Screen:
             # remove the heading
             return (None, None)
 
-        return (urwid.AttrMap(urwid.Text(text, align='center'), 'topic_bar'), None)
+        return (urwid.AttrMap(urwid.Text(text, align='center'), 'room_topic'), None)
 
     def _loadMoreChatHistory(self):
         """Attempts to fetch more chat history for the currently selected chat
@@ -583,7 +590,7 @@ class Screen:
             color = 'text'
         else:
             parent_nr = nr_list[0]
-            color = urwid.AttrSpec(self._getThreadColor(parent_nr), 'black')
+            color = self._getThreadColor(parent_nr)
 
         return " #{} ".format(str(parent_nr).rjust(max_width)), color
 
@@ -1075,7 +1082,7 @@ class Screen:
                 (parent_color, nr_label),
                 ('text', timestamp),
                 (thread_color, thread_id),
-                (urwid.AttrSpec(user_color, 'black'), userprefix),
+                (user_color, userprefix),
             ] + self._getHighlightedTextParts(wrapped_text)
         )
 
@@ -1154,7 +1161,7 @@ class Screen:
             # info = self.m_controller.getBasicUserInfoByName(word[1:], only_cached = True)
             # if not info:
             #     return None
-            attr = urwid.AttrSpec(self._getUserColor(word[1:]), 'black')
+            attr = self._getUserColor(word[1:])
             return (attr, word), rest
         # check for :reactions:
         elif length > 2 and word.startswith(':') and word[2:].find(':') != -1:
@@ -1704,10 +1711,18 @@ class Screen:
     def mainLoop(self):
         """The urwid main loop that processes UI and Controller events."""
 
+        self._applyConfig()
+
+        self.m_loop = urwid.MainLoop(
+            self.m_frame,
+            self._getPalette(),
+            unhandled_input=self._handleInput,
+            # disable mouse handling to support usual copy/paste interaction
+            handle_mouse=False
+        )
+
         self.m_urwid_pipe = self.m_loop.watch_pipe(self._externalEvent)
         self.m_cmd_parser = rocketterm.parser.Parser(self.m_global_objects)
-
-        self._applyConfig()
 
         self.m_controller.addCallbackHandler(self, main_handler=True)
         self.m_controller.start(self._getRows())

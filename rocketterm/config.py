@@ -115,6 +115,7 @@ class RocketConfig:
         self._parseHooks()
         self._parseColors()
         self._parseUserColors()
+        self._parsePaletteColors()
 
     def _raiseMissingItemError(self, section, setting=None):
         if not setting:
@@ -198,7 +199,14 @@ class RocketConfig:
             hooks[key] = value
 
     def _normalizeColor(self, value):
-        return value.strip().strip('"\'').lower()
+        ret = value.strip().strip('"\'').lower()
+
+        if ret == "none":
+            # replace by an arbitrary color to pass verification, it is
+            # ignored anyway
+            ret = "black"
+
+        return ret
 
     def _parseUserColors(self):
         section = 'color.users'
@@ -212,6 +220,25 @@ class RocketConfig:
         for key, value in self.m_parser[section].items():
             color = self._validateForegroundColor(key, value)
             colors[key] = color
+
+    def _parsePaletteColors(self):
+        section = 'color.palette'
+
+        colors = dict()
+        self.m_config["color.palette"] = colors
+
+        if not self.m_parser.has_section(section):
+            return
+
+        from rocketterm.screen import Screen
+
+        for key, value in self.m_parser[section].items():
+            if key not in Screen.DEFAULT_PALETTE:
+                raise ConfigError(
+                    f"Unsupported palette configuration item '{key} = {value}' encountered"
+                )
+            fg, bg = self._validateColorPair(key, value)
+            colors[key] = fg, bg
 
     def _parseColors(self):
         section = 'color'
@@ -265,6 +292,23 @@ class RocketConfig:
         raise ConfigError(
             f"Invalid background color specification '{key} = {color}'. Supported colors: {', '.join(bg_colors)}"
         )
+
+    def _validateColorPair(self, key, color):
+        parts = [p.strip() for p in color.split('/')]
+        if len(parts) != 2:
+            raise ConfigError(
+                f"Invalid color pair specification '{key} = {color}'. Expected 'fg_color/bg_color'."
+            )
+
+        if parts[0] == "none" and parts[1] == "none":
+            raise ConfigError(
+                f"Invalid color pair specification '{key} = {color}' (can't be all 'none')."
+            )
+
+        fg = self._validateForegroundColor(key, parts[0])
+        bg = self._validateBackgroundColor(key, parts[1])
+
+        return fg, bg
 
     def getConfig(self):
 
