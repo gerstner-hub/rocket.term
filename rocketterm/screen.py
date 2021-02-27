@@ -485,7 +485,7 @@ class Screen:
             return
 
         for nr, msg in enumerate(messages):
-            self._addChatMessage(msg, at_end=False)
+            self._addChatMessageSafe(msg, at_end=False)
             if nr != 0 and (nr % 512) == 0:
                 self._setStatusMessage(
                     "Processing messages from {} ({}/{})".format(
@@ -585,14 +585,14 @@ class Screen:
         """Attempts to fetch more chat history for the currently selected chat
         room.
 
-        For each newly loaded chat message _addChatMessage() is invoked.
+        For each newly loaded chat message _addChatMessageSafe() is invoked.
 
         :return int: Number of message that could be additionally loaded.
         """
         more_msgs = self.m_controller.loadMoreRoomMessages()
 
         for nr, msg in enumerate(more_msgs):
-            self._addChatMessage(msg, at_end=False)
+            self._addChatMessageSafe(msg, at_end=False)
 
         return len(more_msgs)
 
@@ -1226,6 +1226,24 @@ class Screen:
 
         return None
 
+    def _addChatMessageSafe(self, *args, **kwargs):
+        """Calls _addChatMessage with exception safety.
+
+        When an exception is thrown while adding chat messages then there is a
+        risk that the complete room is broken. Try to avoid that by catching
+        exceptions and adding an "error chat message".
+        """
+
+        try:
+            self._addChatMessage(*args, **kwargs)
+        except Exception as e:
+            errmsg = urwid.Text([('text', f"internal error processing this message: {e}")])
+            self._addRowToChatBox(errmsg, at_end=True)
+            import traceback
+            et = traceback.format_exc()
+            self.m_logger.error(f"Message processing failed: {e}\n{et}\n")
+            self.internalError(f"Message processing failed: {e}")
+
     def _addChatMessage(self, msg, at_end):
         """Adds a chat message to the current chat box.
 
@@ -1268,9 +1286,9 @@ class Screen:
         prepended / appended, then this will be done."""
 
         if not self.m_oldest_chat_msg and not self.m_newest_chat_msg:
+            compare_ts = msg.getCreationTimestamp()
             self.m_oldest_chat_msg = msg
             self.m_newest_chat_msg = msg
-            compare_ts = msg.getCreationTimestamp()
         elif at_end:  # newer message
             compare_ts = self.m_newest_chat_msg.getCreationTimestamp()
             self.m_newest_chat_msg = msg
@@ -1530,7 +1548,7 @@ class Screen:
 
         if room_id == self.m_current_room.getID():
             self.m_room_msg_count = self.m_controller.getRoomMsgCount()
-            self._addChatMessage(msg, at_end=True)
+            self._addChatMessageSafe(msg, at_end=True)
             if msg.isIncrementalUpdate():
                 # if this related to an older message then make sure we
                 # resolve any unresolved references
