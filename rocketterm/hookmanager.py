@@ -198,7 +198,7 @@ class HookManager:
             "room_type": room.typeLabel(),
         }
 
-        if msg.isIncrementalUpdate():
+        if msg.isIncrementalUpdate() and msg.getOldMessage() is not None:
             context["old_json"] = json.dumps(msg.getOldMessage().getRaw())
 
         self._executeHooks(hook, context)
