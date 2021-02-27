@@ -107,7 +107,7 @@ class RocketConfig:
 
     def _parseConfig(self):
 
-        self.m_parser = configparser.ConfigParser()
+        self.m_parser = configparser.RawConfigParser()
         self.m_config = dict()
         self.m_parser.read(self.m_path)
 
