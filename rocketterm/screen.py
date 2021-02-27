@@ -28,21 +28,20 @@ class Screen:
     urwid to manage the terminal screen.
     """
 
-    # an urwid palette that allows to reuse common colors for similar UI
-    # items.
+    # an urwid palette that allows to reuse common colors for similar UI items.
     palette = (
-        ('text', 'white', 'black', '', '#ffa', '#60d'),
-        ('selected_text', 'white,standout', 'black', '', '#ffa', '#60d'),
-        ('activity_text', 'light magenta', 'black', '', '#ffa', '#60d'),
-        ('attention_text', 'light red', 'black', '', '#ffa', '#60d'),
-        ('bg1', 'black', 'black', '', 'g99', '#d06'),
-        ('bg2', 'light green', 'black', '', 'g99', '#d06'),
-        ('border', 'light magenta', 'white', '', 'g38', '#808'),
-        ('topic_bar', 'brown', 'dark green', '', 'g38', '#808'),
-        ('date_bar', 'white', 'dark gray', '', 'g38', '#808'),
-        ('input', 'white', 'black'),
-        ('link_id', 'light green', 'black'),
-        ('file_id', 'brown', 'black')
+        ('text',            'white',            'black'),
+        ('selected_text',   'white,standout',   'black'),
+        ('activity_text',   'light magenta',    'black'),
+        ('attention_text',  'light red',        'black'),
+        ('bg1',             'black',            'black'),
+        ('bg2',             'light green',      'black'),
+        ('border',          'light magenta',    'white'),
+        ('topic_bar',       'brown',            'dark green'),
+        ('date_bar',        'white',            'dark gray'),
+        ('input',           'white',            'black'),
+        ('link_id',         'light green',      'black'),
+        ('file_id',         'brown',            'black')
     )
 
     # default value for dynamic user and thread colors
