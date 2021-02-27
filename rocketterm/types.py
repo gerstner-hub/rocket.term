@@ -6,7 +6,7 @@
 
 from enum import Enum
 
-from rocketterm.utils import rcTimeToDatetime
+from rocketterm.utils import datetimeToRcTime, rcTimeToDatetime
 
 
 class MethodCallError(Exception):
@@ -790,6 +790,9 @@ class RoomMessage:
             # it seems regular messages don't carry a type entry
             return MessageType.RegularMessage
 
+    def setMessageType(self, mt):
+        self.m_data["t"] = mt.value
+
     def getClientTimestamp(self):
         return rcTimeToDatetime(self.m_data["ts"]["$date"])
 
@@ -838,6 +841,9 @@ class RoomMessage:
         """
         return 'editedAt' in self.m_data
 
+    def setEditTime(self, time):
+        self.m_data['editedAt'] = {"$date": datetimeToRcTime(time)}
+
     def getEditTime(self):
         date = self.m_data.get('editedAt', {"$date": 0})["$date"]
         return rcTimeToDatetime(date)
@@ -847,6 +853,10 @@ class RoomMessage:
             return BasicUserInfo(self.m_data['editedBy'])
         except KeyError:
             return None
+
+    def setEditUser(self, user):
+        """Set the edit user to the given raw JSON data."""
+        self.m_data['editedBy'] = user
 
     def hasURLs(self):
         return len(self.getURLs()) != 0

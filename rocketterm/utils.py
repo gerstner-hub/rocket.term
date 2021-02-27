@@ -1,5 +1,6 @@
 # vim: ts=4 et sw=4 sts=4 :
 
+import datetime
 from html.parser import HTMLParser
 
 
@@ -75,8 +76,11 @@ class CallbackMultiplexer:
 
 def rcTimeToDatetime(rc_time):
     """Converts a rocket chat timestamp into a Python datetime object."""
-    import datetime
     return datetime.datetime.fromtimestamp(rc_time / 1000.0)
+
+
+def datetimeToRcTime(dt):
+    return int(dt.timestamp() * 1000.0)
 
 
 def createRoom(rt_room_obj, rt_subscription):
