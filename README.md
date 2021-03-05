@@ -129,6 +129,10 @@ Access Tokens" is not available then the Rocket.chat instance might not allow
 the use of tokens. You can try to talk to the Administrator of the server to
 enable this feature.
 
+The INI file allows furhermore customization of key bindings, colors and hooks
+to be invoked upon certain chat events. Refer to the template configuration
+file for a more complete documentation of what you can do.
+
 ### Different Rocket.chat Room Types
 
 Rocket.chat supports three different room types that users of the web
@@ -232,6 +236,9 @@ keyboard controls available:
 The `Meta` key mapping depends on the terminal you use but it is typically the
 `Alt` or `Control` key.
 
+You can also customize these default key bindings in the INI configuration
+file to your liking.
+
 ### Opening URLs
 
 URLs in chat messages are treated specially by the Rocket.Chat server. It
@@ -270,7 +277,39 @@ applications that run in the foreground.
   currently a limit of 50 users, however, that are loaded for each room.
   Otherwise the time needed to load all the data for each room would be too
   high for rooms with a lot of users. Further users are loaded lazily as
-  they appear in messages etc.
+  they appear in messages etc. When using the `/whois` command, rocket.term
+  will load a complete user list from the server when tab-completing usernames.
+
+### Limitations
+
+- There is currently an inefficiency in the implementation of how chat rooms
+  are processed. When you load the complete history for a room with many
+  message (say more than a few thousand messages), then switching to these
+  rooms can cause a noticable delay. The reason behind this is that each time
+  a room is selected *all* locally cached messages will be processed and
+  rendered again. To avoid this in the future the rendered messages will have
+  to be cached but this is a larger work item and requires some redesign of
+  the code base.
+- Depending on the quality of your network connection and the load and
+  reliability of the Rocket.Chat server, the API connection to the server can
+  break. rocket.term attempts to display a message in the status bar when this
+  happens. You can also configure a hook script in the INI file which will be
+  invoked when the connection fails. Another type of behaviour I have seen is
+  that asynchronous server events are not sent any more by the server although
+  the connection as such remains open. In this case you can send out messages by
+  they will not appear, because no updates are received from the server. When
+  reconnecting you will typically see the messages you typed previously. There
+  is little what rocket.term can do about these strange states, except maybe
+  implementing a timeout or a keepalive protocol to recognize the situation.
+- I have witnessed artifacts in chat rooms with many users and old chat
+  history. For example users have somehow been removed from the server and
+  appear as `deleted_user123` suddenly. Another thing are references to
+  message threads that are no longer found in the chat history. When this
+  happens then rocket.term will load the complete room history to resolve
+  these referenced messages but will give up in the end and display the
+  related message thread with a `#???` message nr. Since these are
+  inconsistencies on the server side there is little rocket.term can do about
+  it.
 
 ### A Note about Data Retrieval and Application Reactiveness
 
