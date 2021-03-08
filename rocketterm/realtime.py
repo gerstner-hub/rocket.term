@@ -52,6 +52,7 @@ class RealtimeSession:
         self.m_logger = logging.getLogger("rtsocket")
 
         self._reset()
+        self._checkVersion()
 
         self.m_ws = websocket.WebSocketApp(
             server_uri.getRealtimeURI(),
@@ -60,6 +61,26 @@ class RealtimeSession:
             on_close=self._wsClose,
             on_open=self._wsOpen
         )
+
+    def _checkVersion(self):
+        major, minor, _ = websocket.__version__.split('.')
+        major = int(major)
+        minor = int(minor)
+
+        MIN_MAJOR = 0
+        MIN_MINOR = 53
+
+        # older versions of websocket-client have issues with the callback
+        # signatures for _wsError & friends. Somewhen they added support for
+        # class methods but it was strangely broken, some versions around 0.48
+        # through 0.50 also worked but lets just stick to newer versions than
+        # 0.53 at the moment to avoid trouble. See upstream issue #471.
+
+        if major < MIN_MAJOR or (major == MIN_MAJOR and minor < MIN_MINOR):
+            raise Exception(
+                f"Your websocket-client module ({websocket.__version__}) is too old. "
+                f"At least version {MIN_MAJOR}.{MIN_MINOR} is needed."
+            )
 
     def _reset(self):
         """Resets all session state."""
