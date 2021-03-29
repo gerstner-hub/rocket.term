@@ -708,6 +708,10 @@ class Screen:
             return self._getChangedStarsText(old_msg, new_msg)
         elif old_msg.getURLs() != new_msg.getURLs():
             return self._getChangedURLInfo(old_msg, new_msg)
+        elif old_msg.getMessage() != new_msg.getMessage():
+            return "[automatic message update]\n" + new_msg.getMessage()
+        elif old_msg.getEditUser().getUsername() != new_msg.getEditUser().getUsername():
+            return "[username changed to " + new_msg.getEditUser().getUsername() + "]"
 
         self.m_logger.warning(
             "unhandled message update.\nold = {}\nnew = {}".format(
