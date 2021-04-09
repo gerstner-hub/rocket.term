@@ -1,6 +1,8 @@
 # vim: ts=4 et sw=4 sts=4 :
 
 import copy
+import datetime
+import http.client
 import logging
 import pprint
 
@@ -9,6 +11,7 @@ import requests
 
 # rocket.term
 import rocketterm.types
+import rocketterm.utils
 
 
 class RestSession:
@@ -63,6 +66,14 @@ class RestSession:
         """
         if resp.status_code == expected:
             return
+        elif resp.status_code == http.client.TOO_MANY_REQUESTS:
+            self.m_logger.warning("Too many requests on REST API")
+            reset_time = resp.headers.get("x-ratelimit-reset", None)
+            if reset_time:
+                reset_time = rocketterm.utils.datetimeFromUTC_ms(int(reset_time))
+                diff = reset_time - datetime.datetime.utcnow()
+                self.m_logger.warning(f"Rate limiting will be reset in {diff.seconds} seconds")
+            raise rocketterm.types.TooManyRequests(resp.json(), reset_time=reset_time)
 
         raise rocketterm.types.RESTError(
             resp.status_code,

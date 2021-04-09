@@ -83,6 +83,10 @@ def datetimeToRcTime(dt):
     return int(dt.timestamp() * 1000.0)
 
 
+def datetimeFromUTC_ms(utc_ts_ms):
+    return datetime.datetime.utcfromtimestamp(utc_ts_ms / 1000.0)
+
+
 def createRoom(rt_room_obj, rt_subscription):
     """Creates a new room object from the given raw room and subscription data
     structures."""

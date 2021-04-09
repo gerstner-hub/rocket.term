@@ -1,6 +1,8 @@
 # vim: ts=4 et sw=4 sts=4 :
 
+import datetime
 import logging
+import time
 
 # rocket.term
 import rocketterm.realtime
@@ -273,7 +275,7 @@ class RocketComm:
 
         return (total, [rocketterm.types.UserInfo(data) for data in members])
 
-    def getUserList(self, progress_cb=None):
+    def getUserList(self, progress_cb=None, retry_on_too_many_reqs=True):
         """Retrieves a full list of users on the server. Returns a list of
         BasicUserInfo instances.
 
@@ -288,12 +290,32 @@ class RocketComm:
 
         while True:
             try:
-                resp = self.m_rest_session.getUserList(offset=offset)
+                # using a larger count here is necessary to avoiding hitting
+                # rate limiting too early. with the default count of 50 and a
+                # users list of ~1.500 users I am currently hitting a rate
+                # limiting delay of ~50 seconds, which breaks user experience
+                # considerably :-/
+                resp = self.m_rest_session.getUserList(count=200, offset=offset)
             except rocketterm.types.HTTPError as e:
                 if e.isForbidden():
                     raise rocketterm.types.ActionNotAllowed(
                             "your account is not allowed to list users on the server")
-                raise
+                raise Exception(f"code = {e.getCode()}")
+            except rocketterm.types.TooManyRequests as err:
+                if not retry_on_too_many_reqs:
+                    raise
+
+                if err.hasResetTime():
+                    now = datetime.datetime.utcnow()
+                    diff = err.getResetTime() - now
+                    sleep_secs = diff.seconds
+                    if sleep_secs < 0:
+                        sleep_secs = 1.0
+                else:
+                    sleep_secs = 1.0
+
+                time.sleep(sleep_secs)
+                continue
 
             ret.extend([rocketterm.types.BasicUserInfo(info) for info in resp["users"]])
 

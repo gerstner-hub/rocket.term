@@ -31,9 +31,18 @@ class ActionNotAllowed(Exception):
 
 class TooManyRequests(Exception):
 
-    def __init__(self, error, *args, **kwargs):
+    def __init__(self, error, reset_time=None, *args, **kwargs):
         super().__init__(error, *args, **kwargs)
         self.m_error = error
+        self.m_reset_time = reset_time
+
+    def hasResetTime(self):
+        return self.m_reset_time is not None
+
+    def getResetTime(self):
+        """Returns a datetime object in UTC describing the point in time when
+        rate limiting will be turned off again."""
+        return self.m_reset_time
 
 
 class LoginError(Exception):

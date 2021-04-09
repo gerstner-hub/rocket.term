@@ -273,6 +273,7 @@ class Parser:
                 reason += ": " + e.getErrorReason()
             except AttributeError:
                 pass
+
             ret = "{} command failed with: {}".format(cmd.value, reason)
             self.m_logger.info(ret)
             import traceback
