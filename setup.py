@@ -40,7 +40,7 @@ try:
 
     setup(
         name = 'rocket.term',
-        version = '0.1.0',
+        version = '0.2.0-r2',
         description = 'rocket.term is a text based chat client for the Rocket.chat messaging solution',
         long_description = long_desc,
         author = 'Matthias Gerstner',
