@@ -54,12 +54,33 @@ class RealtimeSession:
         self._reset()
         self._checkVersion()
 
+        callbacks = {
+            "message": self._wsMessage,
+            "error": self._wsError,
+            "close": self._wsClose,
+            "open": self._wsOpen
+        }
+
+        # sadly there is even more disturbance with websocket-client than we
+        # already have in _checkVersion(). See upstream issue #669. In minor
+        # version update 0.58 the callback signatures unexpectedly changed to
+        # receive an app object as first parameter.
+        # work around this by wrapping callback functions for older versions
+        # to receive None as `app`.
+        if self.m_ws_version[0] == 0 and self.m_ws_version[1] <= 57:
+            import functools
+
+            def fixedCB(cb, *args, orig_cb):
+                return orig_cb(None, *args)
+
+            callbacks = dict([(key, functools.partial(fixedCB, orig_cb=val)) for key, val in callbacks.items()])
+
         self.m_ws = websocket.WebSocketApp(
             server_uri.getRealtimeURI(),
-            on_message=self._wsMessage,
-            on_error=self._wsError,
-            on_close=self._wsClose,
-            on_open=self._wsOpen
+            on_message=callbacks["message"],
+            on_error=callbacks["error"],
+            on_close=callbacks["close"],
+            on_open=callbacks["open"]
         )
 
     def _checkVersion(self):
@@ -81,6 +102,8 @@ class RealtimeSession:
                 f"Your websocket-client module ({websocket.__version__}) is too old. "
                 f"At least version {MIN_MAJOR}.{MIN_MINOR} is needed."
             )
+
+        self.m_ws_version = major, minor
 
     def _reset(self):
         """Resets all session state."""
@@ -114,7 +137,7 @@ class RealtimeSession:
         self.m_condition = threading.Condition()
         self.m_error_cb = None
 
-    def _wsMessage(self, message):
+    def _wsMessage(self, app, message):
         """Called when a new websocket message is received.
 
         :param str message: plaintext message content.
@@ -138,7 +161,7 @@ class RealtimeSession:
             except Exception as e:
                 self.m_logger.error("failed to handle incoming message:" + str(e))
 
-    def _wsError(self, error):
+    def _wsError(self, app, error):
         """Called when an error on websocket level is received.
 
         :param str error: plaintext error message content.
@@ -148,7 +171,7 @@ class RealtimeSession:
             if not self.m_open:
                 self.m_open_error = error
 
-    def _wsClose(self):
+    def _wsClose(self, app):
         """Called when the websocket connection was closed locally or by the
         peer."""
 
@@ -168,7 +191,7 @@ class RealtimeSession:
         if call_error_cb and self.m_error_cb:
             self.m_error_cb()
 
-    def _wsOpen(self):
+    def _wsOpen(self, app):
         """Called when the websocket connection has been successfully
         established."""
         with self.m_condition:
