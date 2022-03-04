@@ -171,7 +171,7 @@ class RealtimeSession:
             if not self.m_open:
                 self.m_open_error = error
 
-    def _wsClose(self, app):
+    def _wsClose(self, *args, **kwargs):
         """Called when the websocket connection was closed locally or by the
         peer."""
 

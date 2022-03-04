@@ -5,6 +5,7 @@ import logging
 import os
 import shlex
 import subprocess
+import time
 from enum import Enum
 
 import rocketterm.types
@@ -59,6 +60,7 @@ class Command(Enum):
     KickUser = "kick"
     ShowRoomBox = "showroombox"
     RoomActivity = "roomactivity"
+    ArchiveRoom = "archive"
 
 
 # the first format placeholder will receive the actual command name
@@ -114,7 +116,8 @@ USAGE = {
     Command.InviteUser: "/{} @USERSPEC: invites the given user into the currently selected room.",
     Command.KickUser: "/{} @USERSPEC: kicks the given user from the currently selected room.",
     Command.ShowRoomBox: "/{} BOOL: controls the visibility of the room box view.",
-    Command.RoomActivity: "/{}: show open rooms with activity or attention status."
+    Command.RoomActivity: "/{}: show open rooms with activity or attention status.",
+    Command.ArchiveRoom: "/{}: PATH: archive all chat messages in the current room into a text file."
 }
 
 HIDDEN_COMMANDS = set([
@@ -224,6 +227,7 @@ class Parser:
             Command.JoinChannel: self._getChannelCompletionCandidates,
             Command.SetReaction: self._getReactionCompletionCandidates,
             Command.UploadFile: self._getFileCompletionCandidates,
+            Command.ArchiveRoom: self._getFileCompletionCandidates,
             Command.DownloadFile: self._getFileCompletionCandidates,
             Command.OpenFile: self._getFileCompletionCandidates
         }
@@ -897,7 +901,6 @@ class Parser:
                     self.m_controller.sendMessage(text)
                     break
                 except rocketterm.types.TooManyRequests:
-                    import time
                     self.m_screen.commandFeedback(
                         "{}/{} messages sent. Server slows us down, waiting ...".format(
                             i + 1, count
@@ -1570,3 +1573,25 @@ class Parser:
             return '\n'.join((active, attention))
         else:
             return 'no rooms with activity or attention flag'
+
+    def _handleArchive(self, args):
+
+        if len(args) != 1:
+            return "Expected exactly one parameter: Path to save location."
+
+        from rocketterm.screen import ScrollDirection
+        from rocketterm.types import TooManyRequests
+
+        with open(os.path.expanduser(args[0]), 'w') as archive_fd:
+            while True:
+                try:
+                    self.m_screen._scrollMessages(ScrollDirection.OLDEST)
+                    break
+                except TooManyRequests:
+                    time.sleep(1.0)
+
+            for message in self.m_controller.getCachedRoomMessages():
+                user = message.getUserInfo().getUsername()
+                mtype = message.getMessageType().name
+                _time = message.getServerTimestamp()
+                archive_fd.write(f"{_time.strftime('%x %X')} {mtype.ljust(20)}: {user.ljust(30)} {message.getMessage()}\n")
