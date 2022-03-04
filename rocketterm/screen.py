@@ -710,7 +710,8 @@ class Screen:
             return self._getChangedURLInfo(old_msg, new_msg)
         elif old_msg.getMessage() != new_msg.getMessage():
             return "[automatic message update]\n" + new_msg.getMessage()
-        elif old_msg.getEditUser().getUsername() != new_msg.getEditUser().getUsername():
+        elif old_msg.hasEditUser() and \
+                old_msg.getEditUser().getUsername() != new_msg.getEditUser().getUsername():
             return "[username changed to " + new_msg.getEditUser().getUsername() + "]"
 
         self.m_logger.warning(
