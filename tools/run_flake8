@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 
-pars = ["--max-line-length=120"]
+pars = ["--max-line-length=180"]
 
 flake8 = shutil.which("flake8")
 
