@@ -891,6 +891,9 @@ class RoomMessage:
         """Set the edit user to the given raw JSON data."""
         self.m_data['editedBy'] = user
 
+    def hasEditUser(self):
+        return 'editedBy' in self.m_data
+
     def hasURLs(self):
         return len(self.getURLs()) != 0
 
