@@ -158,7 +158,7 @@ class RestSession:
         :param request_call: The http request call to perform. Needs to be the
                              function of ``self.m_session`` to call like
                              ``self.m_session.get``.
-        :param str endpoint: The endpoint to be appended to the AIP URL.
+        :param str endpoint: The endpoint to be appended to the API URL.
         :param dict data: A dictionary to be converted into JSON and supplied
                           as input data to the REST API request.
         :param dict url_params: A dictionary of key/value pairs to be encoded
