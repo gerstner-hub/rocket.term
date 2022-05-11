@@ -174,12 +174,10 @@ class RestSession:
 
         self._debugRequest(request_call, url, headers, data, url_params)
 
-        if convert_to_json:
-            data = json.dumps(data)
-
         ret = request_call(
             url,
-            data=data,
+            data=None if convert_to_json else data,
+            json=data if convert_to_json else None,
             headers=headers,
             params=url_params,
             files=files
