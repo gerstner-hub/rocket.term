@@ -718,9 +718,17 @@ class Controller:
         return rocketterm.emojis.EMOJIS_BY_CATEGORY
 
     def _getServerNeedsSetUserStatusWorkaround(self):
+        if not self.m_server_info:
+            # newer rocket.chat versions no longer deliver server_info, these
+            # won't be affected then anyway anymore
+            return False
         return rocketterm.utils.getServerHasSetUserStatusBug(self.m_server_info)
 
     def _getServerNeedsUserStatusEventWorkaround(self):
+        if not self.m_server_info:
+            # newer rocket.chat versions no longer deliver server_info, these
+            # won't be affected then anyway anymore
+            return False
         return rocketterm.utils.getServerHasBogusUserStatusEventBug(self.m_server_info)
 
     def _refreshUserStatus(self, user):

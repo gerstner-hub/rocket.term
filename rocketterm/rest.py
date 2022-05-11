@@ -440,8 +440,14 @@ class RestSession:
     def getInfo(self):
         """Returns remote server information like the RC server version."""
 
-        resp = self._get("info")
-        return resp["info"]
+        try:
+            resp = self._get("info")
+            return resp["info"]
+        except requests.exceptions.JSONDecodeError:
+            # newer version of the rocket.chat server no longer implement this
+            # hook, it is not fully clear to me where the version info is now
+            # found instead
+            return None
 
     def getMessage(self, msg_id):
         """Returns a single chat message by explicit message ID reference."""
