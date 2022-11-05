@@ -447,7 +447,7 @@ class RestSession:
             # newer version of the rocket.chat server no longer implement this
             # hook, it is not fully clear to me where the version info is now
             # found instead
-            return None
+            return {"version": "0.0.0"}
 
     def getMessage(self, msg_id):
         """Returns a single chat message by explicit message ID reference."""
