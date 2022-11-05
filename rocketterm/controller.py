@@ -801,6 +801,10 @@ class Controller:
         elif old_msg.getMessageType() == MessageType.DiscussionCreated:
             # this means that a discussion sub-room has new messages
             return self.m_callbacks.handleDiscussionActivity(old_msg, new_msg)
+        elif old_msg.getIsUnread() != new_msg.getIsUnread():
+            # a message has now been read, in some contexts this update comes
+            # right away even when the user itself is sending a message
+            return False
 
         old_json = old_msg.getRaw()
         new_json = new_msg.getRaw()

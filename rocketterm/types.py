@@ -966,6 +966,8 @@ class RoomMessage:
 
         return rcTimeToDatetime(self.m_data["dlm"]["$date"])
 
+    def getIsUnread(self):
+        return self.m_data.get('unread', False)
 
 class EmojiInfo:
 
