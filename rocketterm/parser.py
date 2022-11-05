@@ -69,7 +69,7 @@ USAGE = {
     Command.DeleteMessage: "/{} #MSGSPEC: deletes the given message from the currently selected room.",
     Command.EditMessage: "/{} #MSGSPEC text...: edits the text of an existing message in the currently selected room.",
     Command.RepeatMessage: "/{} COUNT text: repeatedly send a message. "
-                           "The optional placeholder {MSGNUM} in the text will be replaced by the iterator count.",
+                           "The optional placeholder {{MSGNUM}} in the text will be replaced by the iterator count.",
     Command.ReplyInThread: "/{} #MSGSPEC text...: replies to another message or thread in the currently selected room",
     Command.HideRoom: "/{} [ROOMSPEC]: hides the current or specified room without leaving / unsubscribing from it",
     Command.OpenRoom: "/{} ROOMSPEC: re-adds the specified room that was previously hidden",
