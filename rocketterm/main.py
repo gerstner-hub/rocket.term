@@ -71,6 +71,13 @@ class RocketTerm:
             help="Provides an alternate path to the configuration file to use.",
             default=None
         )
+        self.m_parser.add_argument(
+            "--msg-batch-size",
+            type=int,
+            help="Use a customized batch size for obtaining room history.",
+            default=0
+        )
+
 
     def parseArgs(self):
         self.m_args = self.m_parser.parse_args()

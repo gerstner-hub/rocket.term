@@ -1767,7 +1767,10 @@ class Screen:
         self.m_cmd_parser = rocketterm.parser.Parser(self.m_global_objects)
 
         self.m_controller.addCallbackHandler(self, main_handler=True)
-        self.m_controller.start(self._getRows())
+        batch_size = self.m_global_objects.cmd_args.msg_batch_size
+        if batch_size <= 0:
+            batch_size = self._getRows()
+        self.m_controller.start(batch_size)
 
         default_room = self.m_global_objects.config["default_room"]
 
