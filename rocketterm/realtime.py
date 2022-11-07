@@ -1,6 +1,7 @@
 # vim: ts=4 et sw=4 sts=4 :
 
 import copy
+import datetime
 import json
 import logging
 import pprint
@@ -299,7 +300,15 @@ class RealtimeSession:
             if tag == "error-action-not-allowed":
                 raise rocketterm.types.ActionNotAllowed(error)
             elif tag == "too-many-requests":
-                raise rocketterm.types.TooManyRequests(error)
+                details = error.get('details', {})
+                ttr = details.get('timeToReset', 0)
+                if ttr != 0:
+                    delta = datetime.timedelta(milliseconds=ttr)
+                    reset_time = datetime.datetime.utcnow() + delta
+                    self.m_logger.warning(f"Rate limiting will be reset in {ttr / 1000.0} seconds")
+                else:
+                    reset_time = None
+                raise rocketterm.types.TooManyRequests(error, reset_time=reset_time)
             else:
                 raise rocketterm.types.MethodCallError(error)
 

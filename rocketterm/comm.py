@@ -124,6 +124,18 @@ class RocketComm:
 
         return ret
 
+    def _sleepForThrottle(self, too_many_reqs_err):
+        if too_many_reqs_err.hasResetTime():
+            now = datetime.datetime.utcnow()
+            diff = too_many_reqs_err.getResetTime() - now
+            sleep_secs = diff.seconds
+            if sleep_secs < 0:
+                sleep_secs = 1.0
+        else:
+            sleep_secs = 1.0
+
+        time.sleep(sleep_secs)
+
     def callREST_Get(self, endpoint):
         return self.m_rest_session._get(endpoint)
 
@@ -234,7 +246,7 @@ class RocketComm:
 
         return ret
 
-    def getRoomMessages(self, room, num_msgs, older_than=None):
+    def getRoomMessages(self, room, num_msgs, older_than=None, retry_on_too_many_reqs=True):
         """Retrieves the RoomMessage objects for the given room object.
 
         :param int num_msgs: maximum number of messages to return
@@ -251,7 +263,16 @@ class RocketComm:
         else:
             max_ts = None
 
-        history = self.m_rt_session.getRoomHistory(room.getID(), num_msgs, max_ts)
+        while True:
+            try:
+                history = self.m_rt_session.getRoomHistory(room.getID(), num_msgs, max_ts)
+                break
+            except rocketterm.types.TooManyRequests as err:
+                if not retry_on_too_many_reqs:
+                    raise
+                else:
+                    self._sleepForThrottle(err)
+                    continue
 
         remaining = history['result']['unreadNotLoaded']
         messages = [rocketterm.types.RoomMessage(m) for m in history['result']['messages']]
@@ -304,18 +325,9 @@ class RocketComm:
             except rocketterm.types.TooManyRequests as err:
                 if not retry_on_too_many_reqs:
                     raise
-
-                if err.hasResetTime():
-                    now = datetime.datetime.utcnow()
-                    diff = err.getResetTime() - now
-                    sleep_secs = diff.seconds
-                    if sleep_secs < 0:
-                        sleep_secs = 1.0
                 else:
-                    sleep_secs = 1.0
-
-                time.sleep(sleep_secs)
-                continue
+                    self._sleepForThrottle(err)
+                    continue
 
             ret.extend([rocketterm.types.BasicUserInfo(info) for info in resp["users"]])
 
