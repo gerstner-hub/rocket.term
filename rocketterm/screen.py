@@ -411,7 +411,12 @@ class Screen:
             return 'selected_text' if room == self.m_current_room else 'text'
 
         logged_in_user = self.m_controller.getLoggedInUserInfo()
-        peer_uid = room.getPeerUserID(logged_in_user)
+        try:
+            peer_uid = room.getPeerUserID(logged_in_user)
+        except Exception as e:
+            self.m_logger.warn(f"Failed to determine peer user ID: {str(e)}")
+            # don't fail because of this, simply ignore the peer status then
+            return 'text'
         peer_user = self.m_controller.getBasicUserInfoByID(peer_uid)
         status, _ = self.m_controller.getUserStatus(peer_user)
 
