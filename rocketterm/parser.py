@@ -793,11 +793,12 @@ class Parser:
 
         full_info = self.m_comm.getUserInfo(basic_info)
 
-        return "{}: {}, active = {}, status = {}, utc-offset = {}".format(
+        return "{}: {}, active = {}, status = {}, utc-offset = {}, id = {}".format(
             username, full_info.getFriendlyName(),
             "1" if full_info.isActive() else "0",
             full_info.getStatus().value,
-            full_info.getUTCOffset()
+            full_info.getUTCOffset(),
+            full_info.getID()
         )
 
     def _handleSetstatus(self, args):
