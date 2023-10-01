@@ -261,6 +261,11 @@ def wrapText(text, width, indent_len):
     # therefore explicitly split existing newlines to keep them, then
     # process each line with textwrap.
 
+    # in some strange situations a negative width is calculated here, be
+    # robust against
+    if width <= 0:
+        return text
+
     indent = (' ' * indent_len)
 
     orig_lines = text.split('\n')
