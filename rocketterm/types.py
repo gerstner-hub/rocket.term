@@ -696,7 +696,7 @@ class FileInfo:
         return self.m_file_data['name']
 
     def getMIMEType(self):
-        return self.m_file_data['type']
+        return self.m_file_data.get("type", "")
 
     def getDescription(self):
         return self.m_attachment.get("description", "")
@@ -911,7 +911,7 @@ class RoomMessage:
             return None
 
         for attachment in self.m_data.get("attachments", []):
-            if attachment["type"] != "file":
+            if attachment.get("type") != "file":
                 continue
             elif attachment["title"] == self.m_data["file"]["name"]:
                 break
