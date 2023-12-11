@@ -172,18 +172,7 @@ class Screen:
 
         columns = self._getMainFrameColumns(show_roombox=self.m_show_roombox)
 
-        # this will be the main outer frame, containing a heading bar as
-        # header (will be generated dynamically in _updateMainHeading()),
-        # the columns with room box and chat box as main content and a pile
-        # with status box and input box as footer.
-        self.m_frame = urwid.Frame(
-            columns,
-            footer=urwid.Pile([]),
-            header=None,
-            focus_part='footer'
-        )
-
-        footer_pile = self.m_frame.contents["footer"][0]
+        footer_pile = urwid.Pile([])
         footer_pile.contents.append((
             urwid.AttrMap(urwid.Text("Command Input", align='center'), 'bar'),
             footer_pile.options()
@@ -197,6 +186,17 @@ class Screen:
             footer_pile.options()
         ))
         footer_pile.focus_position = len(footer_pile.contents) - 1
+
+        # this will be the main outer frame, containing a heading bar as
+        # header (will be generated dynamically in _updateMainHeading()),
+        # the columns with room box and chat box as main content and a pile
+        # with status box and input box as footer.
+        self.m_frame = urwid.Frame(
+            columns,
+            footer=footer_pile,
+            header=None,
+            focus_part='footer'
+        )
 
     def _getPalette(self):
         # urwid expects an iterable of tuples ('label', 'fg', 'bg', ...)
