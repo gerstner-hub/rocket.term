@@ -84,7 +84,7 @@ class RocketComm:
 
     def _streamNotifyLoggedCB(self, client_cb, collection, event, data):
         if event == "user-status":
-            for user_id, username, status, text in data:
+            for user_id, username, status, text, *_ in data:
                 presence = rocketterm.utils.createUserPresenceFromStatusIndicator(status)
                 status_event = rocketterm.types.UserStatusEvent(
                     user_id, username, presence, text
