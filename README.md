@@ -57,6 +57,15 @@ It is not a full replacement of the web interface in terms of configuration
 and settings. It concentrates on the actual and most frequently used chat
 features.
 
+### Current State of the Project
+
+Sadly I'm no longer actively using Rocket.Chat, therefore there is little
+incentive and opportunity for me to push forward this application. I will try
+to deal with any issues and pull requests you open though.
+
+I somebody would be interested in taking over maintenance I would be open to
+support you as far as possible.
+
 ## Installation
 
 ### Requirements
